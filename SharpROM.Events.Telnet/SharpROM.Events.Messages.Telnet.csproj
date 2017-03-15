@@ -1,0 +1,13 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp1.1</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SharpROM.Events\SharpROM.Events.csproj" />
+    <ProjectReference Include="..\SharpROM.Net.Abstract\SharpROM.Net.Abstract.csproj" />
+    <ProjectReference Include="..\SharpROM.Net.Util\SharpROM.Net.Util.csproj" />
+  </ItemGroup>
+
+</Project>

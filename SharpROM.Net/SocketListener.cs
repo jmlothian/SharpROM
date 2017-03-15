@@ -1,0 +1,1025 @@
+﻿using SharpROM.Core;
+using SharpROM.Events.Abstract;
+using SharpROM.Events.Messages;
+using SharpROM.Net.Abstract;
+using SharpROM.Net.Messages;
+using SharpROM.Net.Util;
+using SharpROM.Services.Events;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net.Sockets;
+using System.Text;
+using System.Threading;
+
+namespace SharpROM.Net
+{
+	public class SocketRecvDataHandler
+	{
+		public byte[] RecievedData { get; set; }
+		public DescriptorData receiveDescriptor { get; set; }
+		public IEventRoutingService EventRoutingService { get; set; }
+		public List<ISocketReceiveParser> Parsers { get; set; }
+		public void ParseData(byte[] Data)
+		{
+			foreach (ISocketReceiveParser parser in Parsers)
+			{
+				if (Data != null)
+				{
+					Data = parser.Parse(Data, receiveDescriptor);
+				}
+			}
+			receiveDescriptor.UnprocessedRecvBytes = Data;
+		}
+		//TODO: convert HandleData to a parser, run after telnet ops
+		public void HandleData(Object threadContext)
+		{
+			lock(receiveDescriptor.SyncRecvProcessing)
+			{
+				//we have data left over from the last parsing, add them together
+				if(receiveDescriptor.UnprocessedRecvBytes != null)
+				{
+					int oldLen = receiveDescriptor.UnprocessedRecvBytes.Length;
+					byte[] newBuffer = new byte[oldLen + RecievedData.Length];
+					Buffer.BlockCopy(receiveDescriptor.UnprocessedRecvBytes, 0, newBuffer, 0, oldLen);
+					Buffer.BlockCopy(RecievedData, 0, newBuffer, oldLen, RecievedData.Length);
+					RecievedData = newBuffer;
+				}
+				ParseData(RecievedData);
+
+			}
+			/*
+			//at the most, this will be the capacity
+			int AtCount = 0;
+			int Last = 0;
+			string Command = "";
+			lock (receiveDescriptor.CurrentCommand)
+			{
+				for (int i = 0; i < RecievedData.Count(); i++)
+				{
+					byte c = RecievedData[i];
+					switch (c)
+					{
+						case 13: //carriage return, ignore
+							//we still push things onto current command
+							Command = receiveDescriptor.CurrentCommand;
+							if (AtCount > 0)
+							{
+								byte[] CurrentBuffer = new byte[AtCount];
+								Buffer.BlockCopy(RecievedData, Last, CurrentBuffer, 0, AtCount);
+								Command += System.Text.Encoding.Default.GetString(CurrentBuffer);
+							}
+							receiveDescriptor.CurrentCommand = Command;
+							Last = i + 1;
+							AtCount = 0;
+							break;
+						case 10: //newline, end of command
+							//string Command = sb.ToString();
+							//sb.Clear();
+							//receiveDescriptor.UnprocessedCommands.Add(Command);
+							Command = receiveDescriptor.CurrentCommand;
+							if (AtCount > 0)
+							{
+								byte[] CurrentBuffer = new byte[AtCount];
+								Buffer.BlockCopy(RecievedData, Last, CurrentBuffer, 0, AtCount);
+								Command += System.Text.Encoding.Default.GetString(CurrentBuffer);
+							}
+							//blank commands are ok, usually just means "send me default view, refresh prompt, etc"
+							//receiveDescriptor.UnprocessedCommands.Add(Command);
+
+							Last = i + 1;
+							AtCount = 0;
+
+							GlobalOutMessage OutMesg = new GlobalOutMessage();
+							OutMesg.MatchForParentType = true;
+							OutMesg.Message = "[INPUT " + receiveDescriptor.SessionId.ToString() + "]" + Command;//System.Text.Encoding.Default.GetString(receiveDescriptor.localBuffer.dataMessageBuffer);
+							EventRoutingService.QueueEvent(OutMesg);
+
+							receiveDescriptor.CurrentCommand = string.Empty;
+
+							break;
+						default:
+							AtCount++;
+							break;
+					}
+				}
+				//cleanup anything left in the buffer that isn't a complete command -yet-
+				if (AtCount > 0)
+				{
+					Command = receiveDescriptor.CurrentCommand;
+					if (AtCount > 0)
+					{
+						byte[] CurrentBuffer = new byte[AtCount];
+						Buffer.BlockCopy(RecievedData, Last, CurrentBuffer, 0, AtCount);
+						Command += System.Text.Encoding.Default.GetString(CurrentBuffer);
+					}
+					receiveDescriptor.CurrentCommand = Command;
+					AtCount = 0;
+				}
+			}*/
+		}
+	}
+    public class SocketListener : ISocketListener
+    {
+        //private static Logger Log { get; set; }
+
+        //Buffers for sockets are unmanaged by .NET.
+        //So memory used for buffers gets "pinned", which makes the
+        //.NET garbage collector work around it, fragmenting the memory.
+        //Circumvent this problem by putting all buffers together
+        //in one block in memory. Then we will assign a part of that space
+        //to each SocketAsyncEventArgs object, and
+        //reuse that buffer space each time we reuse the SocketAsyncEventArgs object.
+        //Create a large reusable set of buffers for all socket operations.
+        BufferManager theBufferManager;
+
+        // the socket used to listen for incoming connection requests
+        Socket listenSocket;
+
+        //A Semaphore has two parameters, the initial number of available slots
+        // and the maximum number of slots. We'll make them the same.
+        //This Semaphore is used to keep from going over max connection #.
+        //(It is not about controlling threading really here.)
+        Semaphore theMaxConnectionsEnforcer;
+
+        //an object that we pass in and which has all the settings the listener needs
+        SocketListenerSettings socketListenerSettings;
+
+
+
+        // pool of reusable SocketAsyncEventArgs objects for accept operations
+        SocketAsyncEventArgsPool poolOfAcceptEventArgs;
+        // pool of reusable SocketAsyncEventArgs objects for
+        //receive and send socket operations
+	    public SocketAsyncEventArgsPool PoolOfRecSendEventArgs { get; set; }
+
+	    public static int SessionID = 1000;
+
+	    //total clients connected to the server, excluding backlog
+	    internal Int32 numberOfAcceptedSockets;
+
+        // Injected services.
+        IEventRoutingService EventRoutingService { get; set; }
+		public List<ISocketReceiveParser> Parsers { get; set; }
+        //_______________________________________________________________________________
+        // Constructor.
+        public SocketListener(SocketListenerSettings theSocketListenerSettings, IEventRoutingService eventRoutingService, List<ISocketReceiveParser> parsers)
+        {
+            //Log = LogManager.GetCurrentClassLogger();
+
+		    this.numberOfAcceptedSockets = 0; //for testing
+
+		    // This is used to access the event manager(s).
+            EventRoutingService = eventRoutingService;
+			Parsers = parsers;
+
+            this.socketListenerSettings = theSocketListenerSettings;
+            //this.prefixHandler = new PrefixHandler();
+            //this.messageHandler = new MessageHandler();
+
+            //Allocate memory for buffers. We are using a separate buffer space for
+            //receive and send, instead of sharing the buffer space, like the Microsoft
+            //example does.
+            this.theBufferManager = new BufferManager(this.socketListenerSettings.BufferSize
+        	    * (this.socketListenerSettings.NumberOfSaeaForRecSend * 2)
+        	    * this.socketListenerSettings.OpsToPreAllocate,
+        		    this.socketListenerSettings.BufferSize
+        	    * this.socketListenerSettings.OpsToPreAllocate);
+
+            this.PoolOfRecSendEventArgs = new
+        	    SocketAsyncEventArgsPool(this.socketListenerSettings.NumberOfSaeaForRecSend * 2); //* 2 for recv and send
+
+            this.poolOfAcceptEventArgs = new
+        	    SocketAsyncEventArgsPool(this.socketListenerSettings.MaxAcceptOps);
+
+            // Create connections count enforcer
+            this.theMaxConnectionsEnforcer = new
+        	    Semaphore(this.socketListenerSettings.MaxConnections,
+        	    this.socketListenerSettings.MaxConnections);
+
+            //Microsoft's example called these from Main method, which you
+            //can easily do if you wish.
+            Init();
+            StartListen();
+        }
+
+        //____________________________________________________________________________
+        // initializes the server by preallocating reusable buffers and
+        // context objects (SocketAsyncEventArgs objects).
+        //It is NOT mandatory that you preallocate them or reuse them. But, but it is
+        //done this way to illustrate how the API can
+        // easily be used to create reusable objects to increase server performance.
+
+        internal void Init()
+        {
+            // Allocate one large byte buffer block, which all I/O operations will
+            //use a piece of. This guards against memory fragmentation.
+            this.theBufferManager.InitBuffer();
+
+            // preallocate pool of SocketAsyncEventArgs objects for accept operations
+            for (Int32 i = 0; i < this.socketListenerSettings.MaxAcceptOps; i++)
+            {
+                // add SocketAsyncEventArg to the pool
+                this.poolOfAcceptEventArgs.Push(
+                    CreateNewSaeaForAccept(poolOfAcceptEventArgs));
+            }
+
+            //The pool that we built ABOVE is for SocketAsyncEventArgs objects that do
+            // accept operations.
+            //Now we will build a separate pool for SAEAs objects
+            //that do receive/send operations. One reason to separate them is that accept
+            //operations do NOT need a buffer, but receive/send operations do.
+            //ReceiveAsync and SendAsync require
+            //a parameter for buffer size in SocketAsyncEventArgs.Buffer.
+            // So, create pool of SAEA objects for receive/send operations.
+            SocketAsyncEventArgs eventArgObjectForPool;
+
+            Int32 tokenId;
+
+            for (Int32 i = 0; i < this.socketListenerSettings.NumberOfSaeaForRecSend * 2; i++)
+            {
+                //Allocate the SocketAsyncEventArgs object for this loop,
+                //to go in its place in the stack which will be the pool
+                //for receive/send operation context objects.
+                eventArgObjectForPool = new SocketAsyncEventArgs();
+
+                // assign a byte buffer from the buffer block to
+                //this particular SocketAsyncEventArg object
+                this.theBufferManager.SetBuffer(eventArgObjectForPool);
+
+                tokenId = PoolOfRecSendEventArgs.AssignTokenId() + 1000000;
+
+                //Attach the SocketAsyncEventArgs object
+                //to its event handler. Since this SocketAsyncEventArgs object is
+                //used for both receive and send operations, whenever either of those
+                //completes, the IO_Completed method will be called.
+                eventArgObjectForPool.Completed += new
+            		    EventHandler<SocketAsyncEventArgs>(IO_Completed);
+
+                //We can store data in the UserToken property of SAEA object.
+                DescriptorData theTempReceiveSendDescriptorData = new
+				    DescriptorData(this, eventArgObjectForPool, eventArgObjectForPool.Offset,
+            	    eventArgObjectForPool.Offset + this.socketListenerSettings.BufferSize,
+            	    tokenId);
+
+                //We'll have an object that we call DataHolder, that we can remove from
+                //the UserToken when we are finished with it. So, we can hang on to the
+                //DataHolder, pass it to an app, serialize it, or whatever.
+                theTempReceiveSendDescriptorData.CreateNewDataHolder();
+
+                eventArgObjectForPool.UserToken = theTempReceiveSendDescriptorData;
+
+                // add this SocketAsyncEventArg object to the pool.
+                this.PoolOfRecSendEventArgs.Push(eventArgObjectForPool);
+		    }
+        }
+
+        //____________________________________________________________________________
+        // This method is called when we need to create a new SAEA object to do
+        //accept operations. The reason to put it in a separate method is so that
+        //we can easily add more objects to the pool if we need to.
+        //You can do that if you do NOT use a buffer in the SAEA object that does
+        //the accept operations.
+        internal SocketAsyncEventArgs CreateNewSaeaForAccept(SocketAsyncEventArgsPool pool)
+        {
+            //Allocate the SocketAsyncEventArgs object.
+            SocketAsyncEventArgs acceptEventArg = new SocketAsyncEventArgs();
+
+            //SocketAsyncEventArgs.Completed is an event, (the only event,)
+            //declared in the SocketAsyncEventArgs class.
+            //See http://msdn.microsoft.com/en-us/library/
+            //       system.net.sockets.socketasynceventargs.completed.aspx.
+            //An event handler should be attached to the event within
+            //a SocketAsyncEventArgs instance when an asynchronous socket
+            //operation is initiated, otherwise the application will not be able
+            //to determine when the operation completes.
+            //Attach the event handler, which causes the calling of the
+            //AcceptEventArg_Completed object when the accept op completes.
+            acceptEventArg.Completed +=
+                    new EventHandler<SocketAsyncEventArgs>(AcceptEventArg_Completed);
+
+		    //JL
+            //AcceptOpUserToken theAcceptOpToken = new
+            // 			AcceptOpUserToken(pool.AssignTokenId() + 10000);
+
+            //acceptEventArg.UserToken = theAcceptOpToken;
+
+            return acceptEventArg;
+
+            // accept operations do NOT need a buffer.
+            //You can see that is true by looking at the
+            //methods in the .NET Socket class on the Microsoft website. AcceptAsync does
+            //not require a parameter for buffer size.
+        }
+
+        //____________________________________________________________________________
+        // This method starts the socket server such that it is listening for
+        // incoming connection requests.
+        internal void StartListen()
+        {
+            // create the socket which listens for incoming connections
+            listenSocket = new
+                    Socket(this.socketListenerSettings.LocalEndPoint.AddressFamily,
+                    SocketType.Stream, ProtocolType.Tcp);
+
+			listenSocket.NoDelay = true;
+			listenSocket.SendBufferSize = 0;
+
+            //bind it to the port
+            listenSocket.Bind(this.socketListenerSettings.LocalEndPoint);
+
+            // Start the listener with a backlog of however many connections.
+            //"backlog" means pending connections.
+            //The backlog number is the number of clients that can wait for a
+            //SocketAsyncEventArg object that will do an accept operation.
+            //The listening socket keeps the backlog as a queue. The backlog allows
+            //for a certain # of excess clients waiting to be connected.
+            //If the backlog is maxed out, then the client will receive an error when
+            //trying to connect.
+            //max # for backlog can be limited by the operating system.
+            listenSocket.Listen(this.socketListenerSettings.Backlog);
+
+            //Server is listening now****
+
+            // Calls the method which will post accepts on the listening socket.
+            //This call just occurs one time from this StartListen method.
+            //After that the StartAccept method will be called in a loop.
+            StartAccept();
+        }
+
+        //____________________________________________________________________________
+        // Begins an operation to accept a connection request from the client
+        internal void StartAccept()
+        {
+            //Get a SocketAsyncEventArgs object to accept the connection.
+            SocketAsyncEventArgs acceptEventArg;
+            //Get it from the pool if there is more than one in the pool.
+            //We could use zero as bottom, but one is a little safer.
+            if (this.poolOfAcceptEventArgs.Count > 1)
+            {
+                try
+                {
+                    acceptEventArg = this.poolOfAcceptEventArgs.Pop();
+                }
+                //or make a new one.
+                catch
+                {
+				    //todo: look at this, we may want to allocate a block instead of just one
+					//Log.Warn("Creating a new SAEA for Accept - Pool out of SAEA");
+                    acceptEventArg = CreateNewSaeaForAccept(poolOfAcceptEventArgs);
+                }
+            }
+            //or make a new one.
+            else
+            {
+                acceptEventArg = CreateNewSaeaForAccept(poolOfAcceptEventArgs);
+            }
+
+            // Semaphore class is used to control access to a resource or pool of
+            // resources. Enter the semaphore by calling the WaitOne method, which is
+            // inherited from the WaitHandle class, and release the semaphore
+            // by calling the Release method. This is a mechanism to prevent exceeding
+            // the max # of connections we specified. We'll do this before
+            // doing AcceptAsync. If maxConnections value has been reached,
+            // then the thread will pause here until the Semaphore gets released,
+            // which happens in the CloseClientSocket method.
+            this.theMaxConnectionsEnforcer.WaitOne();
+
+            // Socket.AcceptAsync begins asynchronous operation to accept the connection.
+            // Note the listening socket will pass info to the SocketAsyncEventArgs
+            // object that has the Socket that does the accept operation.
+            // If you do not create a Socket object and put it in the SAEA object
+            // before calling AcceptAsync and use the AcceptSocket property to get it,
+            // then a new Socket object will be created for you by .NET.
+            bool willRaiseEvent = listenSocket.AcceptAsync(acceptEventArg);
+
+            // Socket.AcceptAsync returns true if the I/O operation is pending, i.e. is
+            // working asynchronously. The
+            // SocketAsyncEventArgs.Completed event on the acceptEventArg parameter
+            // will be raised upon completion of accept op.
+            // AcceptAsync will call the AcceptEventArg_Completed
+            // method when it completes, because when we created this SocketAsyncEventArgs
+            // object before putting it in the pool, we set the event handler to do it.
+            // AcceptAsync returns false if the I/O operation completed synchronously.
+            // The SocketAsyncEventArgs.Completed event on the acceptEventArg parameter
+            // will NOT be raised when AcceptAsync returns false.
+            if (!willRaiseEvent)
+            {
+                // The code in this if (!willRaiseEvent) statement only runs
+                // when the operation was completed synchronously. It is needed because
+                // when Socket.AcceptAsync returns false,
+                // it does NOT raise the SocketAsyncEventArgs.Completed event.
+                // And we need to call ProcessAccept and pass it the SAEA object.
+                // This is only when a new connection is being accepted.
+                // Probably only relevant in the case of a socket error.
+                ProcessAccept(acceptEventArg);
+            }
+        }
+
+        //____________________________________________________________________________
+        // This method is the callback method associated with Socket.AcceptAsync
+        // operations and is invoked when an async accept operation completes.
+        //This is only when a new connection is being accepted.
+        //Notice that Socket.AcceptAsync is returning a value of true, and
+        //raising the Completed event when the AcceptAsync method completes.
+        private void AcceptEventArg_Completed(object sender, SocketAsyncEventArgs e)
+        {
+            //Any code that you put in this method will NOT be called if
+            //the operation completes synchronously, which will probably happen when
+            //there is some kind of socket error. It might be better to put the code
+            //in the ProcessAccept method.
+            ProcessAccept(e);
+        }
+
+        //____________________________________________________________________________
+        //The e parameter passed from the AcceptEventArg_Completed method
+        //represents the SocketAsyncEventArgs object that did
+        //the accept operation. in this method we'll do the handoff from it to the
+        //SocketAsyncEventArgs object that will do receive/send.
+        private void ProcessAccept(SocketAsyncEventArgs acceptEventArgs)
+        {
+
+		    if (acceptEventArgs.SocketError == SocketError.Success)
+		    {
+			    //Now that the accept operation completed, we can start another
+			    //accept operation, which will do the same. Notice that we are NOT
+			    //passing the SAEA object here.
+			    LoopToStartAccept();
+
+			    // Get a SocketAsyncEventArgs object from the pool of receive/send op
+			    //SocketAsyncEventArgs objects
+			    SocketAsyncEventArgs receiveEventArgs = this.PoolOfRecSendEventArgs.Pop();
+
+			    //Create sessionId in UserToken.
+			    ((DescriptorData)receiveEventArgs.UserToken).CreateSessionId();
+			    //wire up output handling
+			    SocketAsyncEventArgs sendEventArgs = this.PoolOfRecSendEventArgs.Pop();
+
+			    ((DescriptorData)receiveEventArgs.UserToken).SetSendArgs(sendEventArgs);
+
+			    EventRoutingService.RegisterHandler(((DescriptorData)receiveEventArgs.UserToken), typeof(OutMessage));
+				EventRoutingService.RegisterHandler(((DescriptorData)receiveEventArgs.UserToken), typeof(OutMessageB));
+
+
+			    //A new socket was created by the AcceptAsync method. The
+			    //SocketAsyncEventArgs object which did the accept operation has that
+			    //socket info in its AcceptSocket property. Now we will give
+			    //a reference for that socket to the SocketAsyncEventArgs
+			    //object which will do receive/send.
+				acceptEventArgs.AcceptSocket.NoDelay = true;
+				acceptEventArgs.AcceptSocket.SendBufferSize = 0;
+			    receiveEventArgs.AcceptSocket = acceptEventArgs.AcceptSocket;
+			    sendEventArgs.AcceptSocket = acceptEventArgs.AcceptSocket;
+
+			    //We have handed off the connection info from the
+			    //accepting socket to the receiving socket. So, now we can
+			    //put the SocketAsyncEventArgs object that did the accept operation
+			    //back in the pool for them. But first we will clear
+			    //the socket info from that object, so it will be
+			    //ready for a new socket when it comes out of the pool.
+			    acceptEventArgs.AcceptSocket = null;
+			    this.poolOfAcceptEventArgs.Push(acceptEventArgs);
+
+			    //inform anyone who needs to know
+			    ConnectUserMessage NewUser = 
+				    new ConnectUserMessage 
+				    { 
+					    descriptorData = ((DescriptorData)receiveEventArgs.UserToken), 
+					    SessionID = ((DescriptorData)receiveEventArgs.UserToken).SessionId 
+				    };
+                EventRoutingService.QueueEvent(NewUser);
+
+			    StartReceive(receiveEventArgs);
+		    } else
+		    {
+			    // This is when there was an error with the accept op. That should NOT
+			    // be happening often. It could indicate that there is a problem with
+			    // that socket. If there is a problem, then we would have an infinite
+			    // loop here, if we tried to reuse that same socket.
+
+			    // Loop back to post another accept op. Notice that we are NOT
+			    // passing the SAEA object here.
+			    LoopToStartAccept();
+
+			    //JL
+			    //AcceptOpUserToken theAcceptOpToken = 
+			    //(AcceptOpUserToken)acceptEventArgs.UserToken;
+
+			    //Let's destroy this socket, since it could be bad.
+			    HandleBadAccept(acceptEventArgs);
+		    }
+        }
+
+
+
+        //____________________________________________________________________________
+        //LoopToStartAccept method just sends us back to the beginning of the
+        //StartAccept method, to start the next accept operation on the next
+        //connection request that this listening socket will pass of to an
+        //accepting socket. We do NOT actually need this method. You could
+        //just call StartAccept() in ProcessAccept() where we called LoopToStartAccept().
+        //This method is just here to help you visualize the program flow.
+        private void LoopToStartAccept()
+        {
+            StartAccept();
+        }
+
+        //____________________________________________________________________________
+        // Set the receive buffer and post a receive op.
+        private void StartReceive(SocketAsyncEventArgs receiveEventArgs)
+        {
+		    DescriptorData receiveSendToken = (DescriptorData)receiveEventArgs.UserToken;
+		    //if (Program.watchProgramFlow == true)   //for testing
+		    //{
+		    //	Program.testWriter.WriteLine("StartReceive(), receiveSendToken id " + receiveSendToken.TokenId);
+		    //}
+            //Set the buffer for the receive operation.
+            receiveEventArgs.SetBuffer(receiveSendToken.bufferOffsetReceive,
+                 this.socketListenerSettings.BufferSize);
+
+            // Post async receive operation on the socket.
+            bool willRaiseEvent =
+                 receiveEventArgs.AcceptSocket.ReceiveAsync(receiveEventArgs);
+
+            //Socket.ReceiveAsync returns true if the I/O operation is pending. The
+            //SocketAsyncEventArgs.Completed event on the e parameter will be raised
+            //upon completion of the operation. So, true will cause the IO_Completed
+            //method to be called when the receive operation completes.
+            //That's because of the event handler we created when building
+            //the pool of SocketAsyncEventArgs objects that perform receive/send.
+            //It was the line that said
+            //eventArgObjectForPool.Completed +=
+            //     new EventHandler<SocketAsyncEventArgs>(IO_Completed);
+
+            //Socket.ReceiveAsync returns false if I/O operation completed synchronously.
+            //In that case, the SocketAsyncEventArgs.Completed event on the e parameter
+            //will not be raised and the e object passed as a parameter may be
+            //examined immediately after the method call
+            //returns to retrieve the result of the operation.
+            // It may be false in the case of a socket error.
+            if (!willRaiseEvent)
+            {
+                //If the op completed synchronously, we need to call ProcessReceive
+                //method directly. This will probably be used rarely, as you will
+                //see in testing.
+                ProcessReceive(receiveEventArgs);
+            }
+        }
+
+        //____________________________________________________________________________
+        // This method is called whenever a receive or send operation completes.
+        // Here "e" represents the SocketAsyncEventArgs object associated
+        //with the completed receive or send operation
+        void IO_Completed(object sender, SocketAsyncEventArgs e)
+        {
+            //Any code that you put in this method will NOT be called if
+            //the operation completes synchronously, which will probably happen when
+            //there is some kind of socket error.
+
+            // determine which type of operation just
+            // completed and call the associated handler
+            switch (e.LastOperation)
+            {
+                case SocketAsyncOperation.Receive:
+                    ProcessReceive(e);
+                    break;
+
+                case SocketAsyncOperation.Send:
+                    ProcessSend(e);
+                    break;
+
+                default:
+                    //This exception will occur if you code the Completed event of some
+                    //operation to come to this method, by mistake.
+                    throw new ArgumentException("The last operation completed on the socket was not a receive or send");
+            }
+        }
+
+        //____________________________________________________________________________
+        // This method is invoked by the IO_Completed method
+        // when an asynchronous receive operation completes.
+        // If the remote host closed the connection, then the socket is closed.
+        // Otherwise, we process the received data. And if a complete message was
+        // received, then we do some additional processing, to
+        // respond to the client.
+        private void ProcessReceive(SocketAsyncEventArgs receiveEventArgs)
+        {
+            DescriptorData receiveDescriptor =
+					     (DescriptorData)receiveEventArgs.UserToken;
+
+            // If there was a socket error, close the connection. This is NOT a normal
+            // situation, if you get an error here.
+            // In the Microsoft example code they had this error situation handled
+            // at the end of ProcessReceive. Putting it here improves readability
+            // by reducing nesting some.
+            if (receiveEventArgs.SocketError != SocketError.Success)
+            {
+                receiveDescriptor.Reset();
+                CloseClientSocket(receiveEventArgs);
+
+                //Jump out of the ProcessReceive method.
+                return;
+            }
+
+            // If no data was received, close the connection. This is a NORMAL
+            // situation that shows when the client has finished sending data.
+            if (receiveEventArgs.BytesTransferred == 0)
+            {
+                receiveDescriptor.Reset();
+                CloseClientSocket(receiveEventArgs);
+                return;
+            }
+
+            //The BytesTransferred property tells us how many bytes
+            //we need to process.
+            Int32 remainingBytesToProcess = receiveEventArgs.BytesTransferred;
+
+            //If we have not got all of the prefix already,
+            //then we need to work on it here.
+		    //JL
+		    //if (receiveSendToken.receivedPrefixBytesDoneCount <
+		    //				   this.socketListenerSettings.ReceivePrefixLength)
+		    //{
+		    //	remainingBytesToProcess = prefixHandler.HandlePrefix(receiveSendEventArgs,
+		    //			  receiveSendToken, remainingBytesToProcess);
+
+		    //	if (remainingBytesToProcess == 0)
+		    //	{
+		    //		// We need to do another receive op, since we do not have
+		    //		// the message yet, but remainingBytesToProcess == 0.
+		    //		StartReceive(receiveSendEventArgs);
+		    //		//Jump out of the method.
+		    //		return;
+		    //	}
+		    //}
+
+		    //JL
+		    //// If we have processed the prefix, we can work on the message now.
+		    //// We'll arrive here when we have received enough bytes to read
+		    //// the first byte after the prefix.
+		    //bool incomingTcpMessageIsReady = messageHandler
+		    //		  .HandleMessage(receiveSendEventArgs,
+		    //		  receiveSendToken, remainingBytesToProcess);
+
+
+		    bool incomingTcpMessageIsReady = HandleRecvData(receiveEventArgs, receiveDescriptor, remainingBytesToProcess);
+			byte[] recv = new byte[receiveDescriptor.localBuffer.dataMessageBuffer.Length];
+			Buffer.BlockCopy(receiveDescriptor.localBuffer.dataMessageBuffer, 0, recv, 0, receiveDescriptor.localBuffer.dataMessageBuffer.Length);
+			SocketRecvDataHandler dh = new SocketRecvDataHandler
+				{
+					RecievedData = recv,
+					receiveDescriptor = receiveDescriptor,
+					EventRoutingService = EventRoutingService,
+					Parsers = Parsers
+				};
+			ThreadPool.QueueUserWorkItem(dh.HandleData);
+
+		    //JL
+		    //if (incomingTcpMessageIsReady == true)
+		    //{
+		    //	// Pass the DataHolder object to the Mediator here. The data in
+		    //	// this DataHolder can be used for all kinds of things that an
+		    //	// intelligent and creative person like you might think of.
+		    //	receiveSendToken.theMediator.HandleData(receiveSendToken.localBuffer);
+
+		    //	// Create a new DataHolder for next message.
+		    //	receiveSendToken.CreateNewDataHolder();
+
+		    //	//Reset the variables in the UserToken, to be ready for the
+		    //	//next message that will be received on the socket in this
+		    //	//SAEA object.
+		    //	receiveSendToken.Reset();
+
+		    //	receiveSendToken.theMediator.PrepareOutgoingData();
+		    //	StartSend(receiveSendToken.theMediator.GiveBack());
+		    //}
+		    //else
+		    //{
+		    //	// Since we have NOT gotten enough bytes for the whole message,
+		    //	// we need to do another receive op. Reset some variables first.
+
+		    //	// All of the data that we receive in the next receive op will be
+		    //	// message. None of it will be prefix. So, we need to move the
+		    //	// receiveSendToken.receiveMessageOffset to the beginning of the
+		    //	// receive buffer space for this SAEA.
+		    //	receiveSendToken.receiveMessageOffset = receiveSendToken.bufferOffsetReceive;
+
+		    //	// Do NOT reset receiveSendToken.receivedPrefixBytesDoneCount here.
+		    //	// Just reset recPrefixBytesDoneThisOp.
+		    //	receiveSendToken.recPrefixBytesDoneThisOp = 0;
+
+		    //	// Since we have not gotten enough bytes for the whole message,
+		    //	// we need to do another receive op.
+		    //	StartReceive(receiveSendEventArgs);
+		    //}
+
+		    StartReceive(receiveEventArgs);
+        }
+	    public bool HandleRecvData(SocketAsyncEventArgs receiveSendEventArgs, IDescriptorData receiveSendToken, Int32 remainingBytesToProcess)
+	    {
+		    bool incomingTcpMessageIsReady = false;
+
+		    //Create the array where we'll store the complete message, 
+		    //if it has not been created on a previous receive op.
+		    if (receiveSendToken.receivedMessageBytesDoneCount == 0)
+		    {
+			    //if (Program.watchProgramFlow == true)   //for testing
+			    //{
+			    //	Program.testWriter.WriteLine("MessageHandler, creating receive array " + receiveSendToken.TokenId);
+			    //}
+
+
+			    receiveSendToken.localBuffer.dataMessageBuffer = new Byte[receiveSendEventArgs.BytesTransferred];//new Byte[receiveSendToken.lengthOfCurrentIncomingMessage];
+		    }
+
+		    Buffer.BlockCopy(receiveSendEventArgs.Buffer, receiveSendEventArgs.Offset, receiveSendToken.localBuffer.dataMessageBuffer, 0, receiveSendEventArgs.BytesTransferred);
+
+		    //echo
+
+
+		    incomingTcpMessageIsReady = true;
+
+		    //JL
+		    //// Remember there is a receiveSendToken.receivedPrefixBytesDoneCount
+		    //// variable, which allowed us to handle the prefix even when it
+		    //// requires multiple receive ops. In the same way, we have a 
+		    //// receiveSendToken.receivedMessageBytesDoneCount variable, which
+		    //// helps us handle message data, whether it requires one receive
+		    //// operation or many.
+		    //if (remainingBytesToProcess + receiveSendToken.receivedMessageBytesDoneCount == receiveSendToken.lengthOfCurrentIncomingMessage)
+		    //{
+		    //	// If we are inside this if-statement, then we got 
+		    //	// the end of the message. In other words,
+		    //	// the total number of bytes we received for this message matched the 
+		    //	// message length value that we got from the prefix.
+
+		    //	//if (Program.watchProgramFlow == true)   //for testing
+		    //	//{
+		    //	//	Program.testWriter.WriteLine("MessageHandler, length is right for " + receiveSendToken.TokenId);
+		    //	//}
+
+		    //	// Write/append the bytes received to the byte array in the 
+		    //	// DataHolder object that we are using to store our data.
+		    //	Buffer.BlockCopy(receiveSendEventArgs.Buffer, receiveSendToken.receiveMessageOffset, receiveSendToken.theDataHolder.dataMessageReceived, receiveSendToken.receivedMessageBytesDoneCount, remainingBytesToProcess);
+
+		    //	incomingTcpMessageIsReady = true;
+		    //}
+
+		    //else
+		    //{
+		    //	// If we are inside this else-statement, then that means that we
+		    //	// need another receive op. We still haven't got the whole message,
+		    //	// even though we have examined all the data that was received.
+		    //	// Not a problem. In SocketListener.ProcessReceive we will just call
+		    //	// StartReceive to do another receive op to receive more data.
+
+		    //	//if (Program.watchProgramFlow == true)   //for testing
+		    //	//{
+		    //	//	Program.testWriter.WriteLine(" MessageHandler, length is short for " + receiveSendToken.TokenId);
+		    //	//}
+
+		    //	Buffer.BlockCopy(receiveSendEventArgs.Buffer, receiveSendToken.receiveMessageOffset, receiveSendToken.theDataHolder.dataMessageReceived, receiveSendToken.receivedMessageBytesDoneCount, remainingBytesToProcess);
+
+		    //	receiveSendToken.receiveMessageOffset = receiveSendToken.receiveMessageOffset - receiveSendToken.recPrefixBytesDoneThisOp;
+
+		    //	receiveSendToken.receivedMessageBytesDoneCount += remainingBytesToProcess;
+		    //}
+		    //Console.WriteLine(System.Text.Encoding.Default.GetString(receiveSendToken.localBuffer.dataMessageBuffer));
+		    return incomingTcpMessageIsReady;
+
+	    }
+        //____________________________________________________________________________
+        //Post a send op.
+        public void StartSend(SocketAsyncEventArgs sendEventArgs)
+        {
+            DescriptorData currentDescriptor =
+					       (DescriptorData)sendEventArgs.UserToken;
+		    bool willRaiseEvent = false;
+		    //lock (currentDescriptor.SendLock)
+		    {
+                //Log.Debug("Waiting - " + currentDescriptor.SessionId);
+			    //logEventManger.QueueEvent(new LogMessage { Message = "Waiting - " +currentDescriptor.SessionId, Timestamp = DateTime.Now });
+			    //Console.WriteLine("WAITING");
+			    currentDescriptor.asyncOpsAreDone.WaitOne();
+			    //Monitor.Enter(currentDescriptor.SyncRoot);
+                //Log.Debug("Done Waiting");
+                //logEventManger.QueueEvent(new LogMessage { Message = "Done Waiting", Timestamp = DateTime.Now });
+			    //Console.WriteLine("NO WAITING!");
+
+			    //Set the buffer. You can see on Microsoft's page at
+			    //http://msdn.microsoft.com/en-us/library/
+			    //         system.net.sockets.socketasynceventargs.setbuffer.aspx
+			    //that there are two overloads. One of the overloads has 3 parameters.
+			    //When setting the buffer, you need 3 parameters the first time you set it,
+			    //which we did in the Init method. The first of the three parameters
+			    //tells what byte array to use as the buffer. After we tell what byte array
+			    //to use we do not need to use the overload with 3 parameters any more.
+			    //(That is the whole reason for using the buffer block. You keep the same
+			    //byte array as buffer always, and keep it all in one block.)
+			    //Now we use the overload with two parameters. We tell
+			    // (1) the offset and
+			    // (2) the number of bytes to use, starting at the offset.
+
+			    //The number of bytes to send depends on whether the message is larger than
+			    //the buffer or not. If it is larger than the buffer, then we will have
+			    //to post more than one send operation. If it is less than or equal to the
+			    //size of the send buffer, then we can accomplish it in one send op.
+			    OutputBuffer buffer = currentDescriptor.CurrentBuffer();
+			    if (buffer != null)
+			    {
+				    if (buffer.BytesRemaining
+							       <= this.socketListenerSettings.BufferSize)
+				    {
+					    sendEventArgs.SetBuffer(buffer.SentBytes,
+							       buffer.BytesRemaining);
+					    //Copy the bytes to the buffer associated with this SAEA object.
+					    Buffer.BlockCopy(buffer.BufferData,
+							       buffer.SentBytes,
+						      sendEventArgs.Buffer, buffer.SentBytes,
+						      buffer.BytesRemaining);
+				    }
+				    else
+				    {
+					    //We cannot try to set the buffer any larger than its size.
+					    //So since receiveSendToken.sendBytesRemainingCount > BufferSize, we just
+					    //set it to the maximum size, to send the most data possible.
+					    sendEventArgs.SetBuffer(buffer.SentBytes,
+								    this.socketListenerSettings.BufferSize);
+					    //Copy the bytes to the buffer associated with this SAEA object.
+					    Buffer.BlockCopy(currentDescriptor.dataToSend.Peek().BufferData,
+							       buffer.SentBytes,
+						      sendEventArgs.Buffer, buffer.SentBytes,
+						      this.socketListenerSettings.BufferSize);
+
+					    //We'll change the value of sendUserToken.sendBytesRemainingCount
+					    //in the ProcessSend method.
+				    }
+				    //post asynchronous send operation
+				    try
+				    {
+                        //Log.Debug("Trying to Send Async");
+					    //logEventManger.QueueEvent(new LogMessage { Message = "Trying to Send Async", Timestamp = DateTime.Now });
+					    willRaiseEvent =
+						    sendEventArgs.AcceptSocket.SendAsync(sendEventArgs);
+					    if (!willRaiseEvent)
+					    {
+                           // Log.Debug("ProcessSend Called SYNC");
+						    //logEventManger.QueueEvent(new LogMessage { Message = "ProcessSend Called SYNC", Timestamp = DateTime.Now });
+						    ProcessSend(sendEventArgs);
+					    }
+                        else
+					    {
+                            //Log.Debug("ProcessSend Called ASYNC");
+						    //logEventManger.QueueEvent(new LogMessage { Message = "ProcessSend Called ASYNC", Timestamp = DateTime.Now });
+					    }
+				    }
+                    catch(Exception ex)
+				    {
+					    //TODO: we need to make sure that the send event args object is closed too and descriptor cleaned up
+					    //check if we cant send anymore
+					    try
+					    {
+                            //Log.Debug("CLEARED-Err2");
+						    //logEventManger.QueueEvent(new LogMessage { Message = "CLEARED-Err2", Timestamp = DateTime.Now });
+						    //Console.WriteLine("CLEARED-Err2");
+						    currentDescriptor.asyncOpsAreDone.Set();
+						    CloseClientSocket(sendEventArgs);
+					    }
+                        catch(Exception ex2)
+					    {
+                            //Log.ErrorException("Exception", ex2);
+						    //logEventManger.QueueEvent(new LogMessage { Message = "Exception - " + ex2.Message, Timestamp = DateTime.Now });
+					    }
+				    }
+			    }
+                else
+			    {
+                    //Log.Debug("CLEARED-Err1");
+				    //logEventManger.QueueEvent(new LogMessage { Message = "CLEARED-Err1", Timestamp = DateTime.Now });
+
+				    //Console.WriteLine("CLEARED-Err2");
+				    currentDescriptor.asyncOpsAreDone.Set();
+
+			    }
+
+		    }
+        }
+
+        //____________________________________________________________________________
+        // This method is called by I/O Completed() when an asynchronous send completes.
+        // If all of the data has been sent, then this method calls StartReceive
+        //to start another receive op on the socket to read any additional
+        // data sent from the client. If all of the data has NOT been sent, then it
+        //calls StartSend to send more data.
+        private void ProcessSend(SocketAsyncEventArgs sendEventArgs)
+        {
+            DescriptorData currentDescriptor =
+					       (DescriptorData)sendEventArgs.UserToken;
+
+		    OutputBuffer currentBuffer = currentDescriptor.CurrentBuffer();
+
+		    if (currentBuffer != null)
+		    {
+			    currentBuffer.BytesRemaining =
+				    currentBuffer.BytesRemaining - sendEventArgs.BytesTransferred;
+			    currentBuffer.SentBytes = 
+				    currentBuffer.SentBytes + sendEventArgs.BytesTransferred;
+
+		    }
+            //Log.Debug("Done Clearing Main");
+		    //logEventManger.QueueEvent(new LogMessage { Message = "Done Clearing Main", Timestamp = DateTime.Now });
+
+            if (sendEventArgs.SocketError == SocketError.Success)
+            {
+				//todo: not sure how currentbuffer can be null here?
+			    if (currentBuffer != null && currentBuffer.BytesRemaining == 0)
+			    {
+				    currentDescriptor.DequeBuffer();
+				}
+			    if(currentDescriptor.CurrentBuffer() != null)
+			    {
+				    //bytes remaining somewhere!
+					currentDescriptor.asyncOpsAreDone.Set();
+					Thread.Sleep(0);
+					StartSend(sendEventArgs);
+			    } else
+				{
+					currentDescriptor.asyncOpsAreDone.Set();
+					Thread.Sleep(0);
+				}
+			
+            }
+            else
+            {
+                //If we are in this else-statement, there was a socket error.
+                //In this example we'll just close the socket if there was a socket error
+                //when receiving data from the client.
+				currentDescriptor.asyncOpsAreDone.Set();
+				//Log.Warn("Socket Error: " + sendEventArgs.SocketError);
+			    //logEventManger.QueueEvent(new LogMessage { Message = "ERROR: " + sendEventArgs.SocketError, Timestamp = DateTime.Now });
+			    currentDescriptor.Reset();
+                CloseClientSocket(sendEventArgs);
+            }
+       }
+
+        //_______________________________________________________________________
+        // Does the normal destroying of sockets after
+        // we finish receiving and sending on a connection.
+        private void CloseClientSocket(SocketAsyncEventArgs e)
+        {
+            var receiveSendToken = (e.UserToken as DescriptorData);
+
+            // do a shutdown before you close the socket
+            try
+            {
+                e.AcceptSocket.Shutdown(SocketShutdown.Both);
+            }
+            // throws if socket was already closed
+            catch (Exception)
+            {
+            }
+
+            //This method closes the socket and releases all resources, both
+            //managed and unmanaged. It internally calls Dispose.
+            //todo: dotnet core 1.1 doesn't have socket.close, 1.2 will.  Fix here
+            e.AcceptSocket.Shutdown(SocketShutdown.Both);
+            e.AcceptSocket.Dispose();
+
+            //Make sure the new DataHolder has been created for the next connection.
+            //If it has, then dataMessageReceived should be null.
+
+		    if (receiveSendToken.localBuffer.dataMessageBuffer != null)
+		    {
+			    receiveSendToken.CreateNewDataHolder();
+		    }
+
+            // Put the SocketAsyncEventArg back into the pool,
+            // to be used by another client. This
+            this.PoolOfRecSendEventArgs.Push(e);
+
+            // decrement the counter keeping track of the total number of clients
+            //connected to the server, for testing
+            Interlocked.Decrement(ref this.numberOfAcceptedSockets);
+
+            //Release Semaphore so that its connection counter will be decremented.
+            //This must be done AFTER putting the SocketAsyncEventArg back into the pool,
+            //or you can run into problems.
+            this.theMaxConnectionsEnforcer.Release();
+        }
+
+        //____________________________________________________________________________
+        private void HandleBadAccept(SocketAsyncEventArgs acceptEventArgs)
+        {
+            var acceptOpToken = (acceptEventArgs.UserToken as DescriptorData);
+
+            //This method closes the socket and releases all resources, both
+            //managed and unmanaged. It internally calls Dispose.
+            //todo: dotnet core 1.1 doesn't have socket.close, 1.2 will.  Fix here
+            acceptEventArgs.AcceptSocket.Shutdown(SocketShutdown.Both);
+            acceptEventArgs.AcceptSocket.Dispose();
+
+            //Put the SAEA back in the pool.
+            poolOfAcceptEventArgs.Push(acceptEventArgs);
+        }
+    }
+}

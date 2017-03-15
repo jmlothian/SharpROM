@@ -7,10 +7,7 @@
   <ItemGroup>
     <ProjectReference Include="..\SharpROM.Core\SharpROM.Core.csproj" />
     <ProjectReference Include="..\SharpROM.Events.Abstract\SharpROM.Events.Abstract.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Messages\Telnet\" />
+    <ProjectReference Include="..\SharpROM.Net.Util\SharpROM.Net.Util.csproj" />
   </ItemGroup>
 
 </Project>
