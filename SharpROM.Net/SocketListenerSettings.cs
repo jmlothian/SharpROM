@@ -10,27 +10,40 @@ namespace SharpROM.Net
 	public class SocketListenerSettings
 	{
 		// the maximum number of connections the sample is designed to handle simultaneously 
-		private Int32 maxConnections;
+		public Int32 MaxConnections { get; set; }
 
-		// this variable allows us to create some extra SAEA objects for the pool,
-		// if we wish.
-		private Int32 numberOfSaeaForRecSend;
+        // this variable allows us to create some extra SAEA objects for the pool,
+        // if we wish.
+        public Int32 NumberOfSaeaForRecSend { get; set; }
 
-		// max # of pending connections the listener can hold in queue
-		private Int32 backlog;
+        // max # of pending connections the listener can hold in queue
+        public Int32 PendingConnectionsInQueue { get; set; }
 
-		// tells us how many objects to put in pool for accept operations
-		private Int32 maxSimultaneousAcceptOps;
+        // tells us how many objects to put in pool for accept operations
+        public Int32 MaxSimultaneousAcceptOps { get; set; }
 
-		// buffer size to use for each socket receive operation
-		private Int32 receiveBufferSize;
+        // buffer size to use for each socket receive operation, in bytes
+        public Int32 ReceiveBufferSize { get; set; }
 
-		// See comments in buffer manager.
-		private Int32 opsToPreAllocate { get; set; }
+        // See comments in buffer manager.
+        public Int32 OpsToPreAllocate { get; set; }
+        public string IpAddress { get; set; }
+        public Int32 Port { get; set; }
 
-		// Endpoint for the listener.
-		private IPEndPoint localEndPoint;
+        private IPEndPoint _LocalEndPoint = null;
+        // Endpoint for the listener.
+        public IPEndPoint LocalEndPoint {
+            get
+            {
+                if(_LocalEndPoint == null)
+                {
+                    _LocalEndPoint = new IPEndPoint(IPAddress.Parse(IpAddress), Port);
+                }
+                return _LocalEndPoint;
+            }
+        }
 
+        /*
 		public SocketListenerSettings(Int32 maxConnections, Int32 excessSaeaObjectsInPool, Int32 backlog, Int32 maxSimultaneousAcceptOps, Int32 receiveBufferSize, Int32 opsToPreAlloc, IPEndPoint theLocalEndPoint)
 		{
 			this.maxConnections = maxConnections;
@@ -41,7 +54,7 @@ namespace SharpROM.Net
 			this.opsToPreAllocate = opsToPreAlloc;
 			this.localEndPoint = theLocalEndPoint;
 		}
-
+        
 		public Int32 MaxConnections
 		{
 			get
@@ -91,5 +104,6 @@ namespace SharpROM.Net
 				return this.localEndPoint;
 			}
 		}
-	}    
+        */
+    }    
 }

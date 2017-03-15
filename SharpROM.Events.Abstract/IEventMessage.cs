@@ -12,7 +12,7 @@ namespace SharpROM.Events.Abstract
         DateTime ProcessBy { get; set; }
         IServerObject Sender { get; set; }
         IServerObject Target { get; set; }
-
+        int EventType { get; set; }
         int[] Serialize();
     }
 }

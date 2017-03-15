@@ -5,7 +5,7 @@ using SharpROM.Events;
 using SharpROM.Events.Messages;
 using SharpROM.Events.Abstract;
 
-namespace SharpROM.Services.Events.Impl
+namespace SharpROM.Events
 {
     public class EventRoutingService : IEventRoutingService
     {
@@ -13,12 +13,15 @@ namespace SharpROM.Services.Events.Impl
 
         private List<IEventRoutingRule> RoutingRules { get; set; }
         private Dictionary<int, IEventManager> EventManagers { get; set; }
+        private List<Thread> EventThreads { get; set; } = new List<Thread>();
 
-        public EventRoutingService()
+        public EventRoutingService(IEventManager primaryEventManager)
         {
             //Log = LogManager.GetCurrentClassLogger();
             RoutingRules = new List<IEventRoutingRule>();
             EventManagers = new Dictionary<int, IEventManager>();
+            EventManagers.Add(0, new EventManager());
+            EventManagers.Add(1, primaryEventManager);
         }
 
         // EventHandler instances get created by routing rules as well.
@@ -60,10 +63,11 @@ namespace SharpROM.Services.Events.Impl
 				foreach(KeyValuePair<int, IEventManager> EvtManager in EventManagers)
 				{
 					Thread t = new Thread(EvtManager.Value.ProcessQueue);
-					t.Start();
-				}
-				//Thread.Sleep(0);
-			}
+                    t.Start();
+                    EventThreads.Add(t);
+                }
+                //Thread.Sleep(0);
+            }
 		}
 
         public void QueueEvent(IEventMessage message)
@@ -84,6 +88,15 @@ namespace SharpROM.Services.Events.Impl
             var name = t == null ? String.Empty : t.Name;
             //Log.Trace("Unregistering handler for type {0} and game object with GUID {1}.", name, obj.ID);
             EventManagers[1].RemoveHandler(obj, t);
+        }
+
+        public void Dispose()
+        {
+            foreach (KeyValuePair<int, IEventManager> evtMgr in EventManagers)
+            {
+                TerminateEventManagerMessage term = new TerminateEventManagerMessage();
+                evtMgr.Value.QueueEvent(term);
+            }
         }
     }
 }

@@ -13,7 +13,8 @@ namespace SharpROM.Events
 		public DateTime ProcessBy { get; set; }
 		public int Priority { get; set; }
         [Flags]
-        public enum EVENT_TYPE { ET_NONE=0 };
+        public enum EVENT_TYPE { ET_TERM=-1, ET_NONE=0 };
+        public int EventType { get; set; } = 0;
 		public IServerObject Sender { get; set; }
 		public IServerObject Target { get; set; }
         //use "is" instead of GetType so it will match all parent types as well

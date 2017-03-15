@@ -5,8 +5,6 @@ using System.Text;
 using System.Threading;
 using SharpROM.Events.Messages;
 using SharpROM.Events.Triggers;
-using SharpROM.Services;
-using SharpROM.Services.Events;
 using SharpROM.Core.Util;
 using SharpROM.Events.Abstract;
 using System.Reflection;
@@ -30,8 +28,11 @@ namespace SharpROM.Events
         public EventHandlerProxy ProxyHandler = null;
 		public Object SyncRoot = new Object();
 		public Object SyncNext = new Object();
-		//private static Logger Log { get; set; }
-		public EventManager()
+        public EVENTMANAGER_STATE EventManagerState { get; set; } = EVENTMANAGER_STATE.INIT;
+        
+
+        //private static Logger Log { get; set; }
+        public EventManager()
 		{
 			//Log = LogManager.GetCurrentClassLogger();
 		}
@@ -57,10 +58,12 @@ namespace SharpROM.Events
 			//only allow one call to ProcessQueue at a time per event manager
 			if (Monitor.TryEnter(RunningProcessQueue))
 			{
-				long ProcLoops = 0;
+                EventManagerState = EVENTMANAGER_STATE.RUNNING;
+
+                long ProcLoops = 0;
 				DateTime Starting = DateTime.Now;
 				long Eventcount = 0;
-				while (true)
+				while (EventManagerState == EVENTMANAGER_STATE.RUNNING)
 				{
 
 
@@ -93,23 +96,33 @@ namespace SharpROM.Events
 								foreach (IEventMessage Mesg in Mesgs)
 								{
 									Eventcount++;
-									foreach (KeyValuePair<string, List<IServerObject>> handlers in RegisteredHandlerObjects)
-									{
-										//match all inherited types
-										if (Mesg.MatchForParentType)
-										{
-											if (TypeLookup[handlers.Key].IsAssignableFrom(Mesg.GetType()))
-											{
-												//dispatch
-												Dispatch(Mesg, handlers.Value);
-											}
-										}
-										else if (TypeLookup[handlers.Key] == Mesg.GetType()) //match specific type
-										{
-											//dispatch
-											Dispatch(Mesg, handlers.Value);
-										}
-									}
+                                    //check for termination request
+                                    if (Mesg.EventType == (int)EventMessage.EVENT_TYPE.ET_TERM)
+                                    {
+                                        //set to terminating, but continue processing all new messages
+                                        //until this batch is complete
+                                        EventManagerState = EVENTMANAGER_STATE.TERMINATING;
+                                    }
+                                    else
+                                    {
+                                        foreach (KeyValuePair<string, List<IServerObject>> handlers in RegisteredHandlerObjects)
+                                        {
+                                            //match all inherited types
+                                            if (Mesg.MatchForParentType)
+                                            {
+                                                if (TypeLookup[handlers.Key].IsAssignableFrom(Mesg.GetType()))
+                                                {
+                                                    //dispatch
+                                                    Dispatch(Mesg, handlers.Value);
+                                                }
+                                            }
+                                            else if (TypeLookup[handlers.Key] == Mesg.GetType()) //match specific type
+                                            {
+                                                //dispatch
+                                                Dispatch(Mesg, handlers.Value);
+                                            }
+                                        }
+                                    }
 								}
 							}
 						}
@@ -127,6 +140,7 @@ namespace SharpROM.Events
 						Thread.Sleep(1);
 					}
 				}
+                EventManagerState = EVENTMANAGER_STATE.TERMINATED;
 				Monitor.Exit(RunningProcessQueue);
 			}
         }

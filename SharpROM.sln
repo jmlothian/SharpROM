@@ -3,21 +3,23 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.26228.4
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpROM.Events", "SharpROM.Events\SharpROM.Events.csproj", "{63C6EA38-6CE2-4462-BA0C-FF556B7C566C}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpROM.Events", "SharpROM.Events\SharpROM.Events.csproj", "{63C6EA38-6CE2-4462-BA0C-FF556B7C566C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpROM.Events.Abstract", "SharpROM.Events.Abstract\SharpROM.Events.Abstract.csproj", "{3C2E9581-148C-4FAD-B82F-DD5BC8D0961C}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpROM.Events.Abstract", "SharpROM.Events.Abstract\SharpROM.Events.Abstract.csproj", "{3C2E9581-148C-4FAD-B82F-DD5BC8D0961C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpROM.Core", "SharpROM.Core\SharpROM.Core.csproj", "{D96F1F55-59A5-422B-B969-8DC10CAC4C96}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpROM.Core", "SharpROM.Core\SharpROM.Core.csproj", "{D96F1F55-59A5-422B-B969-8DC10CAC4C96}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpROM.Events.Messages.Telnet", "SharpROM.Events.Telnet\SharpROM.Events.Messages.Telnet.csproj", "{B4C5B417-B2B1-41FB-81D3-03C6E1E47C51}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpROM.Events.Messages.Telnet", "SharpROM.Events.Telnet\SharpROM.Events.Messages.Telnet.csproj", "{B4C5B417-B2B1-41FB-81D3-03C6E1E47C51}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpROM.Net", "SharpROM.Net\SharpROM.Net.csproj", "{5473B3CB-2420-414B-B8F8-7927A1E40DBC}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpROM.Net", "SharpROM.Net\SharpROM.Net.csproj", "{5473B3CB-2420-414B-B8F8-7927A1E40DBC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpROM.Net.Abstract", "SharpROM.Net.Abstract\SharpROM.Net.Abstract.csproj", "{465AD112-B3A4-4725-AF90-3DF7278958CE}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpROM.Net.Abstract", "SharpROM.Net.Abstract\SharpROM.Net.Abstract.csproj", "{465AD112-B3A4-4725-AF90-3DF7278958CE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpROM.Net.Util", "SharpROM.Net.Util\SharpROM.Net.Util.csproj", "{13117F13-66BB-4E16-A39F-E10B423D96E3}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpROM.Net.Util", "SharpROM.Net.Util\SharpROM.Net.Util.csproj", "{13117F13-66BB-4E16-A39F-E10B423D96E3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpROM.Net.Telnet", "SharpROM.Net.Telnet\SharpROM.Net.Telnet.csproj", "{1CED0C4B-E479-4F9A-83DB-7FC8CAC98B7C}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpROM.Net.Telnet", "SharpROM.Net.Telnet\SharpROM.Net.Telnet.csproj", "{1CED0C4B-E479-4F9A-83DB-7FC8CAC98B7C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpROM.Apps.Servers.Telnet", "SharpROM.Apps.Servers.Telnet\SharpROM.Apps.Servers.Telnet.csproj", "{F08D0144-2C2B-4F8F-BD82-9C8A1789606A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -57,6 +59,10 @@ Global
 		{1CED0C4B-E479-4F9A-83DB-7FC8CAC98B7C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1CED0C4B-E479-4F9A-83DB-7FC8CAC98B7C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{1CED0C4B-E479-4F9A-83DB-7FC8CAC98B7C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F08D0144-2C2B-4F8F-BD82-9C8A1789606A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F08D0144-2C2B-4F8F-BD82-9C8A1789606A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F08D0144-2C2B-4F8F-BD82-9C8A1789606A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F08D0144-2C2B-4F8F-BD82-9C8A1789606A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

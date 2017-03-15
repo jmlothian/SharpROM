@@ -11,7 +11,7 @@ using SharpROM.Net.Telnet;
 using SharpROM.Net.Messages;
 using SharpROM.Events.Messages.Telnet;
 
-namespace SharpROMLib.Net.Telnet
+namespace SharpROM.Net.Telnet
 {
 	public class TelnetSocketReceiveParser : ServerObject, ISocketReceiveParser
 	{

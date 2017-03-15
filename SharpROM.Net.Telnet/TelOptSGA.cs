@@ -7,7 +7,7 @@ using SharpROM.Net.Telnet;
 using SharpROM.Events.Abstract;
 using SharpROM.Net.Abstract;
 
-namespace SharpROMLib.Net.Telnet
+namespace SharpROM.Net.Telnet
 {
 	public class TelOptSGA : ITelOptHandler
 	{

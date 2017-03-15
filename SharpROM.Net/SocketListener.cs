@@ -1,10 +1,10 @@
-﻿using SharpROM.Core;
+﻿using Microsoft.Extensions.Options;
+using SharpROM.Core;
 using SharpROM.Events.Abstract;
 using SharpROM.Events.Messages;
 using SharpROM.Net.Abstract;
 using SharpROM.Net.Messages;
 using SharpROM.Net.Util;
-using SharpROM.Services.Events;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -163,7 +163,9 @@ namespace SharpROM.Net
 		public List<ISocketReceiveParser> Parsers { get; set; }
         //_______________________________________________________________________________
         // Constructor.
-        public SocketListener(SocketListenerSettings theSocketListenerSettings, IEventRoutingService eventRoutingService, List<ISocketReceiveParser> parsers)
+        public SocketListener( 
+            IOptions<SocketListenerSettings> optionsAccessor,
+            IEventRoutingService eventRoutingService, ISocketReceiveParserFactory recvParserFactory)
         {
             //Log = LogManager.GetCurrentClassLogger();
 
@@ -171,26 +173,26 @@ namespace SharpROM.Net
 
 		    // This is used to access the event manager(s).
             EventRoutingService = eventRoutingService;
-			Parsers = parsers;
+			Parsers = recvParserFactory.CreateSocketReceiveParsers(eventRoutingService);
 
-            this.socketListenerSettings = theSocketListenerSettings;
+            this.socketListenerSettings = optionsAccessor.Value;
             //this.prefixHandler = new PrefixHandler();
             //this.messageHandler = new MessageHandler();
 
             //Allocate memory for buffers. We are using a separate buffer space for
             //receive and send, instead of sharing the buffer space, like the Microsoft
             //example does.
-            this.theBufferManager = new BufferManager(this.socketListenerSettings.BufferSize
+            this.theBufferManager = new BufferManager(this.socketListenerSettings.ReceiveBufferSize
         	    * (this.socketListenerSettings.NumberOfSaeaForRecSend * 2)
         	    * this.socketListenerSettings.OpsToPreAllocate,
-        		    this.socketListenerSettings.BufferSize
+        		    this.socketListenerSettings.ReceiveBufferSize
         	    * this.socketListenerSettings.OpsToPreAllocate);
 
             this.PoolOfRecSendEventArgs = new
         	    SocketAsyncEventArgsPool(this.socketListenerSettings.NumberOfSaeaForRecSend * 2); //* 2 for recv and send
 
             this.poolOfAcceptEventArgs = new
-        	    SocketAsyncEventArgsPool(this.socketListenerSettings.MaxAcceptOps);
+        	    SocketAsyncEventArgsPool(this.socketListenerSettings.MaxSimultaneousAcceptOps);
 
             // Create connections count enforcer
             this.theMaxConnectionsEnforcer = new
@@ -217,7 +219,7 @@ namespace SharpROM.Net
             this.theBufferManager.InitBuffer();
 
             // preallocate pool of SocketAsyncEventArgs objects for accept operations
-            for (Int32 i = 0; i < this.socketListenerSettings.MaxAcceptOps; i++)
+            for (Int32 i = 0; i < this.socketListenerSettings.MaxSimultaneousAcceptOps; i++)
             {
                 // add SocketAsyncEventArg to the pool
                 this.poolOfAcceptEventArgs.Push(
@@ -259,7 +261,7 @@ namespace SharpROM.Net
                 //We can store data in the UserToken property of SAEA object.
                 DescriptorData theTempReceiveSendDescriptorData = new
 				    DescriptorData(this, eventArgObjectForPool, eventArgObjectForPool.Offset,
-            	    eventArgObjectForPool.Offset + this.socketListenerSettings.BufferSize,
+            	    eventArgObjectForPool.Offset + this.socketListenerSettings.ReceiveBufferSize,
             	    tokenId);
 
                 //We'll have an object that we call DataHolder, that we can remove from
@@ -337,7 +339,7 @@ namespace SharpROM.Net
             //If the backlog is maxed out, then the client will receive an error when
             //trying to connect.
             //max # for backlog can be limited by the operating system.
-            listenSocket.Listen(this.socketListenerSettings.Backlog);
+            listenSocket.Listen(this.socketListenerSettings.PendingConnectionsInQueue);
 
             //Server is listening now****
 
@@ -535,7 +537,7 @@ namespace SharpROM.Net
 		    //}
             //Set the buffer for the receive operation.
             receiveEventArgs.SetBuffer(receiveSendToken.bufferOffsetReceive,
-                 this.socketListenerSettings.BufferSize);
+                 this.socketListenerSettings.ReceiveBufferSize);
 
             // Post async receive operation on the socket.
             bool willRaiseEvent =
@@ -828,7 +830,7 @@ namespace SharpROM.Net
 			    if (buffer != null)
 			    {
 				    if (buffer.BytesRemaining
-							       <= this.socketListenerSettings.BufferSize)
+							       <= this.socketListenerSettings.ReceiveBufferSize)
 				    {
 					    sendEventArgs.SetBuffer(buffer.SentBytes,
 							       buffer.BytesRemaining);
@@ -844,12 +846,12 @@ namespace SharpROM.Net
 					    //So since receiveSendToken.sendBytesRemainingCount > BufferSize, we just
 					    //set it to the maximum size, to send the most data possible.
 					    sendEventArgs.SetBuffer(buffer.SentBytes,
-								    this.socketListenerSettings.BufferSize);
+								    this.socketListenerSettings.ReceiveBufferSize);
 					    //Copy the bytes to the buffer associated with this SAEA object.
 					    Buffer.BlockCopy(currentDescriptor.dataToSend.Peek().BufferData,
 							       buffer.SentBytes,
 						      sendEventArgs.Buffer, buffer.SentBytes,
-						      this.socketListenerSettings.BufferSize);
+						      this.socketListenerSettings.ReceiveBufferSize);
 
 					    //We'll change the value of sendUserToken.sendBytesRemainingCount
 					    //in the ProcessSend method.
