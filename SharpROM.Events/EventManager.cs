@@ -20,6 +20,7 @@ namespace SharpROM.Events
 		public PriorityQueue<long, PriorityQueue<int, List<IEventMessage>>> NextQueue
 			= new PriorityQueue<long, PriorityQueue<int, List<IEventMessage>>>();
         //todo: in older .Net, we used Type.GUID for this lookup - I'm not a fan of the string here, we should make something faster
+        // - instead of using "Type", we should have an interface the returns a GUID that objects must implement on their own
         public SortedDictionary<string, List<IServerObject>> RegisteredHandlerObjects = new SortedDictionary<string, List<IServerObject>>();
         public SortedDictionary<string, Type> TypeLookup = new SortedDictionary<string, Type>();
         //todo: throttle ProcessQueue per update
