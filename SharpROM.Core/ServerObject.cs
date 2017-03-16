@@ -16,10 +16,10 @@ namespace SharpROM.Core
 		public bool IsProxyObject { get; set; } = false;
 		//ID of controller responsible for updating this object
 		public int ControllerID { get; set; } = 0;
-		public Guid ID { get; set; }
+		public Guid InstanceId { get; set; }
 		public ServerObject()
 		{
-			ID = Guid.NewGuid();
+			InstanceId = Guid.NewGuid();
 		}
 		public virtual bool HandleEvent(IEventMessage Message)
 		{
