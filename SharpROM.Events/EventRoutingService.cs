@@ -20,8 +20,7 @@ namespace SharpROM.Events
             //Log = LogManager.GetCurrentClassLogger();
             RoutingRules = new List<IEventRoutingRule>();
             EventManagers = new Dictionary<int, IEventManager>();
-            EventManagers.Add(0, new EventManager());
-            EventManagers.Add(1, primaryEventManager);
+            EventManagers.Add(0, primaryEventManager);
         }
 
         // EventHandler instances get created by routing rules as well.
@@ -74,20 +73,20 @@ namespace SharpROM.Events
         {
             //var senderId = message.Sender == null ? "NULL" : message.Sender.ID.ToString();
             //Log.Trace("Queueing event with ID {0} from sender {1}.", message.ID, senderId);
-            EventManagers[1].QueueEvent(message);
+            EventManagers[0].QueueEvent(message);
         }
 
         public void RegisterHandler(IServerObject obj, Type t)
         {
             //Log.Trace("Registering handler for type {0} and game object with GUID {1}.", t.Name, obj.ID);
-            EventManagers[1].RegisterHandler(obj, t);
+            EventManagers[0].RegisterHandler(obj, t);
         }
 
         public void RemoveHandler(IServerObject obj, Type t = null)
         {
             var name = t == null ? String.Empty : t.Name;
             //Log.Trace("Unregistering handler for type {0} and game object with GUID {1}.", name, obj.ID);
-            EventManagers[1].RemoveHandler(obj, t);
+            EventManagers[0].RemoveHandler(obj, t);
         }
 
         public void Dispose()
