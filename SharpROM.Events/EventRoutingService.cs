@@ -75,7 +75,7 @@ namespace SharpROM.Events
         public void QueueEvent(IEventMessage message)
         {
             var senderId = message.Sender == null ? "NULL" : message.Sender.InstanceId.ToString();
-            Logger.LogTrace("Queueing event with ID {0} from sender {1}.", message.ID, senderId);
+            //Logger.LogTrace("Queueing event with ID {0} from sender {1}.", message.ID, senderId);
             EventManagers[0].QueueEvent(message);
         }
 

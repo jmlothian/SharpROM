@@ -624,7 +624,8 @@ namespace SharpROM.Net
             if (receiveEventArgs.SocketError != SocketError.Success)
             {
                 receiveDescriptor.Reset();
-                CloseClientSocket(receiveEventArgs);
+                if(!receiveDescriptor.SocketClosed)
+                    CloseClientSocket(receiveEventArgs);
 
                 //Jump out of the ProcessReceive method.
                 return;
@@ -635,7 +636,8 @@ namespace SharpROM.Net
             if (receiveEventArgs.BytesTransferred == 0)
             {
                 receiveDescriptor.Reset();
-                CloseClientSocket(receiveEventArgs);
+                if (!receiveDescriptor.SocketClosed)
+                    CloseClientSocket(receiveEventArgs);
                 return;
             }
 
@@ -802,116 +804,117 @@ namespace SharpROM.Net
         public void StartSend(SocketAsyncEventArgs sendEventArgs)
         {
             DescriptorData currentDescriptor =
-					       (DescriptorData)sendEventArgs.UserToken;
-		    bool willRaiseEvent = false;
-		    //lock (currentDescriptor.SendLock)
-		    {
+                           (DescriptorData)sendEventArgs.UserToken;
+            bool willRaiseEvent = false;
+            //lock (currentDescriptor.SendLock)
+            {
                 //Log.Debug("Waiting - " + currentDescriptor.SessionId);
-			    //logEventManger.QueueEvent(new LogMessage { Message = "Waiting - " +currentDescriptor.SessionId, Timestamp = DateTime.Now });
-			    //Console.WriteLine("WAITING");
-			    currentDescriptor.asyncOpsAreDone.WaitOne();
-			    //Monitor.Enter(currentDescriptor.SyncRoot);
+                //logEventManger.QueueEvent(new LogMessage { Message = "Waiting - " +currentDescriptor.SessionId, Timestamp = DateTime.Now });
+                //Console.WriteLine("WAITING");
+                currentDescriptor.asyncOpsAreDone.WaitOne();
+                //Monitor.Enter(currentDescriptor.SyncRoot);
                 //Log.Debug("Done Waiting");
                 //logEventManger.QueueEvent(new LogMessage { Message = "Done Waiting", Timestamp = DateTime.Now });
-			    //Console.WriteLine("NO WAITING!");
+                //Console.WriteLine("NO WAITING!");
 
-			    //Set the buffer. You can see on Microsoft's page at
-			    //http://msdn.microsoft.com/en-us/library/
-			    //         system.net.sockets.socketasynceventargs.setbuffer.aspx
-			    //that there are two overloads. One of the overloads has 3 parameters.
-			    //When setting the buffer, you need 3 parameters the first time you set it,
-			    //which we did in the Init method. The first of the three parameters
-			    //tells what byte array to use as the buffer. After we tell what byte array
-			    //to use we do not need to use the overload with 3 parameters any more.
-			    //(That is the whole reason for using the buffer block. You keep the same
-			    //byte array as buffer always, and keep it all in one block.)
-			    //Now we use the overload with two parameters. We tell
-			    // (1) the offset and
-			    // (2) the number of bytes to use, starting at the offset.
+                //Set the buffer. You can see on Microsoft's page at
+                //http://msdn.microsoft.com/en-us/library/
+                //         system.net.sockets.socketasynceventargs.setbuffer.aspx
+                //that there are two overloads. One of the overloads has 3 parameters.
+                //When setting the buffer, you need 3 parameters the first time you set it,
+                //which we did in the Init method. The first of the three parameters
+                //tells what byte array to use as the buffer. After we tell what byte array
+                //to use we do not need to use the overload with 3 parameters any more.
+                //(That is the whole reason for using the buffer block. You keep the same
+                //byte array as buffer always, and keep it all in one block.)
+                //Now we use the overload with two parameters. We tell
+                // (1) the offset and
+                // (2) the number of bytes to use, starting at the offset.
 
-			    //The number of bytes to send depends on whether the message is larger than
-			    //the buffer or not. If it is larger than the buffer, then we will have
-			    //to post more than one send operation. If it is less than or equal to the
-			    //size of the send buffer, then we can accomplish it in one send op.
-			    OutputBuffer buffer = currentDescriptor.CurrentBuffer();
-			    if (buffer != null)
-			    {
-				    if (buffer.BytesRemaining
-							       <= this.socketListenerSettings.ReceiveBufferSize)
-				    {
-					    sendEventArgs.SetBuffer(buffer.SentBytes,
-							       buffer.BytesRemaining);
-					    //Copy the bytes to the buffer associated with this SAEA object.
-					    Buffer.BlockCopy(buffer.BufferData,
-							       buffer.SentBytes,
-						      sendEventArgs.Buffer, buffer.SentBytes,
-						      buffer.BytesRemaining);
-				    }
-				    else
-				    {
-					    //We cannot try to set the buffer any larger than its size.
-					    //So since receiveSendToken.sendBytesRemainingCount > BufferSize, we just
-					    //set it to the maximum size, to send the most data possible.
-					    sendEventArgs.SetBuffer(buffer.SentBytes,
-								    this.socketListenerSettings.ReceiveBufferSize);
-					    //Copy the bytes to the buffer associated with this SAEA object.
-					    Buffer.BlockCopy(currentDescriptor.dataToSend.Peek().BufferData,
-							       buffer.SentBytes,
-						      sendEventArgs.Buffer, buffer.SentBytes,
-						      this.socketListenerSettings.ReceiveBufferSize);
+                //The number of bytes to send depends on whether the message is larger than
+                //the buffer or not. If it is larger than the buffer, then we will have
+                //to post more than one send operation. If it is less than or equal to the
+                //size of the send buffer, then we can accomplish it in one send op.
+                OutputBuffer buffer = currentDescriptor.CurrentBuffer();
+                if (!currentDescriptor.SocketClosed && buffer != null)
+                {
+                    if (buffer.BytesRemaining
+                                   <= this.socketListenerSettings.ReceiveBufferSize)
+                    {
+                        sendEventArgs.SetBuffer(buffer.SentBytes,
+                                   buffer.BytesRemaining);
+                        //Copy the bytes to the buffer associated with this SAEA object.
+                        Buffer.BlockCopy(buffer.BufferData,
+                                   buffer.SentBytes,
+                              sendEventArgs.Buffer, buffer.SentBytes,
+                              buffer.BytesRemaining);
+                    }
+                    else
+                    {
+                        //We cannot try to set the buffer any larger than its size.
+                        //So since receiveSendToken.sendBytesRemainingCount > BufferSize, we just
+                        //set it to the maximum size, to send the most data possible.
+                        sendEventArgs.SetBuffer(buffer.SentBytes,
+                                    this.socketListenerSettings.ReceiveBufferSize);
+                        //Copy the bytes to the buffer associated with this SAEA object.
+                        Buffer.BlockCopy(currentDescriptor.dataToSend.Peek().BufferData,
+                                   buffer.SentBytes,
+                              sendEventArgs.Buffer, buffer.SentBytes,
+                              this.socketListenerSettings.ReceiveBufferSize);
 
-					    //We'll change the value of sendUserToken.sendBytesRemainingCount
-					    //in the ProcessSend method.
-				    }
-				    //post asynchronous send operation
-				    try
-				    {
+                        //We'll change the value of sendUserToken.sendBytesRemainingCount
+                        //in the ProcessSend method.
+                    }
+                    //post asynchronous send operation
+                    try
+                    {
                         //Log.Debug("Trying to Send Async");
-					    //logEventManger.QueueEvent(new LogMessage { Message = "Trying to Send Async", Timestamp = DateTime.Now });
-					    willRaiseEvent =
-						    sendEventArgs.AcceptSocket.SendAsync(sendEventArgs);
-					    if (!willRaiseEvent)
-					    {
-                           // Log.Debug("ProcessSend Called SYNC");
-						    //logEventManger.QueueEvent(new LogMessage { Message = "ProcessSend Called SYNC", Timestamp = DateTime.Now });
-						    ProcessSend(sendEventArgs);
-					    }
+                        //logEventManger.QueueEvent(new LogMessage { Message = "Trying to Send Async", Timestamp = DateTime.Now });
+                        willRaiseEvent =
+                            sendEventArgs.AcceptSocket.SendAsync(sendEventArgs);
+                        if (!willRaiseEvent)
+                        {
+                            // Log.Debug("ProcessSend Called SYNC");
+                            //logEventManger.QueueEvent(new LogMessage { Message = "ProcessSend Called SYNC", Timestamp = DateTime.Now });
+                            ProcessSend(sendEventArgs);
+                        }
                         else
-					    {
+                        {
                             //Log.Debug("ProcessSend Called ASYNC");
-						    //logEventManger.QueueEvent(new LogMessage { Message = "ProcessSend Called ASYNC", Timestamp = DateTime.Now });
-					    }
-				    }
-                    catch(Exception ex)
-				    {
-					    //TODO: we need to make sure that the send event args object is closed too and descriptor cleaned up
-					    //check if we cant send anymore
-					    try
-					    {
+                            //logEventManger.QueueEvent(new LogMessage { Message = "ProcessSend Called ASYNC", Timestamp = DateTime.Now });
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        //TODO: we need to make sure that the send event args object is closed too and descriptor cleaned up
+                        //check if we cant send anymore
+                        try
+                        {
                             Logger.LogDebug("CLEARED-Err2 - " + ex.Message);
-						    //logEventManger.QueueEvent(new LogMessage { Message = "CLEARED-Err2", Timestamp = DateTime.Now });
-						    //Console.WriteLine("CLEARED-Err2");
-						    currentDescriptor.asyncOpsAreDone.Set();
-						    CloseClientSocket(sendEventArgs);
-					    }
-                        catch(Exception ex2)
-					    {
+                            //logEventManger.QueueEvent(new LogMessage { Message = "CLEARED-Err2", Timestamp = DateTime.Now });
+                            //Console.WriteLine("CLEARED-Err2");
+                            currentDescriptor.asyncOpsAreDone.Set();
+                            if (!currentDescriptor.SocketClosed)
+                                CloseClientSocket(sendEventArgs);
+                        }
+                        catch (Exception ex2)
+                        {
                             Logger.LogError("Exception {0}", ex2.Message);
-						    //logEventManger.QueueEvent(new LogMessage { Message = "Exception - " + ex2.Message, Timestamp = DateTime.Now });
-					    }
-				    }
-			    }
+                            //logEventManger.QueueEvent(new LogMessage { Message = "Exception - " + ex2.Message, Timestamp = DateTime.Now });
+                        }
+                    }
+                }
                 else
-			    {
-                    Logger.LogDebug("CLEARED-Err1");
-				    //logEventManger.QueueEvent(new LogMessage { Message = "CLEARED-Err1", Timestamp = DateTime.Now });
+                {
+                    //Logger.LogDebug("CLEARED-Err1");
+                    //logEventManger.QueueEvent(new LogMessage { Message = "CLEARED-Err1", Timestamp = DateTime.Now });
 
-				    //Console.WriteLine("CLEARED-Err2");
-				    currentDescriptor.asyncOpsAreDone.Set();
+                    //Console.WriteLine("CLEARED-Err2");
+                    currentDescriptor.asyncOpsAreDone.Set();
 
-			    }
+                }
 
-		    }
+            }
         }
 
         //____________________________________________________________________________
@@ -967,7 +970,8 @@ namespace SharpROM.Net
 				Logger.LogWarning("Socket Error: " + sendEventArgs.SocketError);
 			    //logEventManger.QueueEvent(new LogMessage { Message = "ERROR: " + sendEventArgs.SocketError, Timestamp = DateTime.Now });
 			    currentDescriptor.Reset();
-                CloseClientSocket(sendEventArgs);
+                if (!currentDescriptor.SocketClosed)
+                    CloseClientSocket(sendEventArgs);
             }
        }
 
@@ -977,61 +981,66 @@ namespace SharpROM.Net
         private void CloseClientSocket(SocketAsyncEventArgs e)
         {
             var receiveSendToken = (e.UserToken as DescriptorData);
-
-            // do a shutdown before you close the socket
-            try
+            lock (receiveSendToken.SyncRoot)
             {
-                e.AcceptSocket.Shutdown(SocketShutdown.Both);
-            }
-            // throws if socket was already closed
-            catch (Exception)
-            {
-            }
-
-            try
-            {
-                //This method closes the socket and releases all resources, both
-                //managed and unmanaged. It internally calls Dispose.
-                //todo: dotnet core 1.1 doesn't have socket.close, 1.2 will.  Fix here
-                e.AcceptSocket.Dispose();
-
-                //Make sure the new DataHolder has been created for the next connection.
-                //If it has, then dataMessageReceived should be null.
-
-                if (receiveSendToken.localBuffer.dataMessageBuffer != null)
+                if (!receiveSendToken.SocketClosed)
                 {
-                    receiveSendToken.CreateNewDataHolder();
+                    receiveSendToken.SocketClosed = true;
+                    // do a shutdown before you close the socket
+                    try
+                    {
+                        e.AcceptSocket.Shutdown(SocketShutdown.Both);
+                    }
+                    // throws if socket was already closed
+                    catch (Exception)
+                    {
+                    }
+
+                    try
+                    {
+                        //This method closes the socket and releases all resources, both
+                        //managed and unmanaged. It internally calls Dispose.
+                        //todo: dotnet core 1.1 doesn't have socket.close, 1.2 will.  Fix here
+                        e.AcceptSocket.Dispose();
+
+                        //Make sure the new DataHolder has been created for the next connection.
+                        //If it has, then dataMessageReceived should be null.
+
+                        if (receiveSendToken.localBuffer.dataMessageBuffer != null)
+                        {
+                            receiveSendToken.CreateNewDataHolder();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning("Error Closing Connection: " + ex.Message);
+
+                    }
+                    finally
+                    {
+                        //inform anyone who needs to know
+                        DisconnectUserMessage discMesg = new DisconnectUserMessage();
+                        discMesg.descriptorData = receiveSendToken;
+                        discMesg.SessionID = discMesg.descriptorData.SessionId;
+                        EventRoutingService.QueueEvent(discMesg);
+
+                        //unregister event handlers
+                        EventRoutingService.RemoveHandler(((DescriptorData)e.UserToken), typeof(OutMessage));
+                        EventRoutingService.RemoveHandler(((DescriptorData)e.UserToken), typeof(OutMessageB));
+                        // Put the SocketAsyncEventArg back into the pool,
+                        // to be used by another client. This
+                        this.PoolOfRecSendEventArgs.Push(e);
+
+                        // decrement the counter keeping track of the total number of clients
+                        //connected to the server, for testing
+                        Interlocked.Decrement(ref this.numberOfAcceptedSockets);
+
+                        //Release Semaphore so that its connection counter will be decremented.
+                        //This must be done AFTER putting the SocketAsyncEventArg back into the pool,
+                        //or you can run into problems.
+                        this.theMaxConnectionsEnforcer.Release();
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                Logger.LogWarning("Error Closing Connection: " + ex.Message);
-
-            }
-            finally
-            {
-                //inform anyone who needs to know
-                DisconnectUserMessage discMesg = new DisconnectUserMessage();
-                discMesg.descriptorData = (e.UserToken as DescriptorData);
-                discMesg.descriptorData.SocketClosed = true;
-                discMesg.SessionID = discMesg.descriptorData.SessionId;
-                EventRoutingService.QueueEvent(discMesg);
-
-                //unregister event handlers
-                EventRoutingService.RemoveHandler(((DescriptorData)e.UserToken), typeof(OutMessage));
-                EventRoutingService.RemoveHandler(((DescriptorData)e.UserToken), typeof(OutMessageB));
-                // Put the SocketAsyncEventArg back into the pool,
-                // to be used by another client. This
-                this.PoolOfRecSendEventArgs.Push(e);
-
-                // decrement the counter keeping track of the total number of clients
-                //connected to the server, for testing
-                Interlocked.Decrement(ref this.numberOfAcceptedSockets);
-
-                //Release Semaphore so that its connection counter will be decremented.
-                //This must be done AFTER putting the SocketAsyncEventArg back into the pool,
-                //or you can run into problems.
-                this.theMaxConnectionsEnforcer.Release();
             }
 
         }

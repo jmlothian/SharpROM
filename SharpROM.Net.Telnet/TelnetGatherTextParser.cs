@@ -1,5 +1,6 @@
 ﻿using SharpROM.Events.Abstract;
 using SharpROM.Events.Messages;
+using SharpROM.Events.Messages.Telnet;
 using SharpROM.Net.Abstract;
 using SharpROM.Net.Messages;
 using System;
@@ -83,15 +84,19 @@ namespace SharpROM.Net.Telnet
 
 							Last = i + 1;
 							AtCount = 0;
-							
-							GlobalOutMessage OutMesg = new GlobalOutMessage();
-							OutMesg.MatchForParentType = true;
-							OutMesg.Message = "[INPUT " + receiveDescriptor.SessionId.ToString() + "]" + System.Text.Encoding.ASCII.GetString(currentCommand);
-							eventRoutingService.QueueEvent(OutMesg);
+                            //newline followed by a newline will result in no currentCommand, so don't do anything.  Nothing to do.
+                            if (currentCommand != null)
+                            {
+                                TelnetTextInput OutMesg = new TelnetTextInput();
+                                OutMesg.MatchForParentType = true;
+                                OutMesg.Message = System.Text.Encoding.ASCII.GetString(currentCommand);
+                                OutMesg.SessionId = receiveDescriptor.SessionId;
 
-							//receiveDescriptor.CurrentCommand = string.Empty;
-							currentCommand = null;
+                                eventRoutingService.QueueEvent(OutMesg);
 
+                                //receiveDescriptor.CurrentCommand = string.Empty;
+                                currentCommand = null;
+                            }
 							break;
 						default:
 							AtCount++;

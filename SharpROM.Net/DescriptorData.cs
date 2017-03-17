@@ -15,6 +15,8 @@ using SharpROM.Net.Messages;
 
 namespace SharpROM.Net
 {
+    //todo: these need to be a pool / be re-usable somehow.  Or we need to find another way to do this.
+    //  They accumulate at the moment, and the allocation / GC is a "no no"
 	public class DescriptorSender
 	{
 		public DescriptorData Descriptor { get; set; }

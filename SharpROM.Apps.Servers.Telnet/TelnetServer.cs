@@ -2,6 +2,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using SharpROM.Events.Abstract;
 using SharpROM.Net.Abstract;
+using SharpROM.Net.Telnet;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -22,7 +23,9 @@ namespace SharpROM.Apps.Servers.Telnet
 
         public TelnetServer(
             IEventRoutingService eventRoutingService,
-            ISocketListener socketListener)
+            ISocketListener socketListener,
+            TelnetEventHandler eventHandler
+            )
         {
             //Log = LogManager.GetCurrentClassLogger();
 

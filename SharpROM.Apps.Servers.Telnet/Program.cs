@@ -21,6 +21,8 @@ namespace SharpROM.Apps.Servers.Telnet
 
             services.AddOptions();
             services.Configure<SocketListenerSettings>(Configuration);
+            services.AddSingleton<TelOptManagement>(); 
+            services.AddSingleton<TelnetEventHandler>();
             services.AddSingleton<TelnetServer>();
             //todo: eventually we will need to pass a factory for a list of IEventManagers
             services.AddSingleton<IEventManager, EventManager>();

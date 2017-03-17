@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace SharpROM.Net.Telnet
+namespace SharpROM.Net.Telnet.TelOptHandlers
 {
 	public interface ITelOptHandler
 	{
