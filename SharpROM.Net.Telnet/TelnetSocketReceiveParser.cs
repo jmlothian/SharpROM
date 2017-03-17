@@ -10,6 +10,8 @@ using SharpROM.Events.Abstract;
 using SharpROM.Net.Telnet;
 using SharpROM.Net.Messages;
 using SharpROM.Events.Messages.Telnet;
+using Microsoft.Extensions.Logging;
+using SharpROM.Events.Messages;
 
 namespace SharpROM.Net.Telnet
 {
@@ -24,8 +26,10 @@ namespace SharpROM.Net.Telnet
 		public Dictionary<Int32, HashSet<byte>> TelOptsOff { get; set; }
 		public Dictionary<Int32, HashSet<byte>> TelOptsRequested { get; set; }
 		public static Dictionary<byte, ITelOptHandler> TelOptHandlers { get; set; }
-		public TelnetSocketReceiveParser(IEventRoutingService evtRoutingService)
+        public ILogger Logger { get; set; }
+		public TelnetSocketReceiveParser(IEventRoutingService evtRoutingService, ILogger<ISocketReceiveParser> logger)
 		{
+            Logger = logger;
 			eventRoutingService = evtRoutingService;
 			TelOptsOn = new Dictionary<int, HashSet<byte>>();
 			TelOptsOff = new Dictionary<int, HashSet<byte>>();
@@ -36,13 +40,22 @@ namespace SharpROM.Net.Telnet
 			TelOptHandlers[sga.Opt] = sga;
 
 			evtRoutingService.RegisterHandler(this, typeof(ConnectUserMessage));
-			evtRoutingService.RegisterHandler(this, typeof(TelOptMessage));
+            evtRoutingService.RegisterHandler(this, typeof(DisconnectUserMessage));
+            evtRoutingService.RegisterHandler(this, typeof(TelOptMessage));
 
 		}
 		public override bool HandleEvent(IEventMessage Message)
 		{
 			bool ContinueProcessing = true;
-			if(Message is ConnectUserMessage)
+            if (Message is DisconnectUserMessage)
+            {
+                int SessionID = ((DisconnectUserMessage)Message).SessionID;
+                GlobalOutMessage mesg = new GlobalOutMessage();
+                mesg.MatchForParentType = true;
+                mesg.Message = SessionID.ToString() + " has disconnected.";
+                eventRoutingService.QueueEvent(mesg);
+            } else
+            if (Message is ConnectUserMessage)
 			{
 				int SessionID = ((ConnectUserMessage)Message).SessionID;
 				TelOptsRequested[SessionID] = new HashSet<byte>();
@@ -68,11 +81,17 @@ namespace SharpROM.Net.Telnet
 						eventRoutingService.QueueEvent(mesg);
 					}
 				}
-			} else if (Message is TelOptMessage)
+                GlobalOutMessage connmesg = new GlobalOutMessage();
+                connmesg.MatchForParentType = true;
+                connmesg.Message = SessionID.ToString() + " has connected.";
+                eventRoutingService.QueueEvent(connmesg);
+            } else if (Message is TelOptMessage)
 			{
 				TelOptMessage mesg = (TelOptMessage)Message;
 				int SessionID = mesg.Descriptor.SessionId;
-				if(TelOptsRequested.ContainsKey(mesg.Descriptor.SessionId))
+                Logger.LogTrace("TelOpt Request - {0} - Option - {1}", ((TelOptMessage)Message).Code, ((TelOptMessage)Message).Option);
+
+                if (TelOptsRequested.ContainsKey(mesg.Descriptor.SessionId))
 				{
 					byte TelOptReply = (byte)TELOPTCODE.WONT;
 					if ((mesg.Code == TELOPTCODE.WILL || mesg.Code == TELOPTCODE.DO))
@@ -95,8 +114,9 @@ namespace SharpROM.Net.Telnet
 							OutMessageB outMesg = new OutMessageB();
 							outMesg.Message = new byte[] { (byte)TELOPTCODE.IAC, TelOptReply, mesg.Option };
 							outMesg.Target = ((TelOptMessage)Message).Descriptor;
-							eventRoutingService.QueueEvent(mesg);
-						}
+							eventRoutingService.QueueEvent(outMesg);
+                            Logger.LogTrace("\tReply - {0} - Option - {1}", outMesg.Message[1], outMesg.Message[2]);
+                        }
 					}
 				} else
 				{

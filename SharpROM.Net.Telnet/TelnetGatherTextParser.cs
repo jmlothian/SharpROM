@@ -1,6 +1,7 @@
 ﻿using SharpROM.Events.Abstract;
 using SharpROM.Events.Messages;
 using SharpROM.Net.Abstract;
+using SharpROM.Net.Messages;
 using System;
 using System.Collections.Generic;
 using System.Linq;

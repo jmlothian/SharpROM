@@ -11,6 +11,7 @@ using SharpROM.Events.Abstract;
 using SharpROM.Core;
 using SharpROM.Net.Abstract;
 using SharpROM.Net.Util;
+using SharpROM.Net.Messages;
 
 namespace SharpROM.Net
 {
@@ -79,6 +80,7 @@ namespace SharpROM.Net
 		public List<string> UnprocessedCommands { get; set; }
 		public byte[] UnprocessedRecvBytes { get; set; }
 		public Object SyncRecvProcessing = new Object();
+        public bool SocketClosed { get; set; } = false;
 		public void SetSendArgs(SocketAsyncEventArgs e)
 		{
 			SendArgs = e;
@@ -145,37 +147,49 @@ namespace SharpROM.Net
 		}
 
 
-		public override bool HandleEvent(IEventMessage Message)
-		{
-			bool ContinueProcessing = true;
-			if(Message is GlobalOutMessage)
-			{
-				DescriptorSender ds = new DescriptorSender{ Descriptor = this, Output=((GlobalOutMessage)Message).Message + "\r\n"};
-				ThreadPool.QueueUserWorkItem(ds.ExecuteSend);
-				//Thread t = new Thread(ds.ExecuteSend);
-				//t.Start();
-				//send out
-				//SendOutput(((GlobalOutMessage)Message).Message + "\r\n");
-			}
-			else if (Message is OutMessage)
-			{
-				//send out
-				//don't continue processing, this is the only target possible
-				DescriptorSender ds = new DescriptorSender { Descriptor = this, Output = ((OutMessage)Message).Message };
-				Thread t = new Thread(ds.ExecuteSend);
-				t.Start();
-				//SendOutput(((GlobalOutMessage)Message).Message);
-				ContinueProcessing = false;
-			} else if (Message is OutMessageB)
-			{
-				DescriptorSenderB ds = new DescriptorSenderB { Descriptor = this, Output = ((OutMessageB)Message).Message };
-				Thread t = new Thread(ds.ExecuteSend);
-				t.Start();
-				//SendOutput(((GlobalOutMessage)Message).Message);
-				ContinueProcessing = false;
-			}
-			return ContinueProcessing;
-		}
+        public override bool HandleEvent(IEventMessage Message)
+        {
+            bool ContinueProcessing = true;
+
+            if (Message is GlobalOutMessage)
+            {
+                if (SocketClosed == false)
+                {
+                    DescriptorSender ds = new DescriptorSender { Descriptor = this, Output = ((GlobalOutMessage)Message).Message + "\r\n" };
+                    ThreadPool.QueueUserWorkItem(ds.ExecuteSend);
+                }
+                //Thread t = new Thread(ds.ExecuteSend);
+                //t.Start();
+                //send out
+                //SendOutput(((GlobalOutMessage)Message).Message + "\r\n");
+            }
+            else if (Message is OutMessage)
+            {
+                //send out
+                //don't continue processing, this is the only target possible
+                if (SocketClosed == false)
+                {
+                    DescriptorSender ds = new DescriptorSender { Descriptor = this, Output = ((OutMessage)Message).Message };
+                    Thread t = new Thread(ds.ExecuteSend);
+                    t.Start();
+                }
+                //SendOutput(((GlobalOutMessage)Message).Message);
+                ContinueProcessing = false;
+            }
+            else if (Message is OutMessageB)
+            {
+                if (SocketClosed == false)
+                {
+                    DescriptorSenderB ds = new DescriptorSenderB { Descriptor = this, Output = ((OutMessageB)Message).Message };
+                    Thread t = new Thread(ds.ExecuteSend);
+                    t.Start();
+                }
+                //SendOutput(((GlobalOutMessage)Message).Message);
+                ContinueProcessing = false;
+            }
+
+            return ContinueProcessing;
+        }
 		public AutoResetEvent asyncOpsAreDone = new AutoResetEvent(true);
 		public Object SyncRoot = new Object();
 		public void SendOutput(string data)

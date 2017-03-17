@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SharpROM.Core;
 using SharpROM.Events.Abstract;
 using SharpROM.Events.Messages;
@@ -161,14 +162,17 @@ namespace SharpROM.Net
         // Injected services.
         IEventRoutingService EventRoutingService { get; set; }
 		public List<ISocketReceiveParser> Parsers { get; set; }
+        private ILogger Logger { get; set; }
         //_______________________________________________________________________________
         // Constructor.
         public SocketListener( 
             IOptions<SocketListenerSettings> optionsAccessor,
-            IEventRoutingService eventRoutingService, ISocketReceiveParserFactory recvParserFactory)
+            IEventRoutingService eventRoutingService, 
+            ISocketReceiveParserFactory recvParserFactory,
+            ILogger<SocketListener> logger)
         {
             //Log = LogManager.GetCurrentClassLogger();
-
+            Logger = logger;
 		    this.numberOfAcceptedSockets = 0; //for testing
 
 		    // This is used to access the event manager(s).
@@ -482,8 +486,11 @@ namespace SharpROM.Net
 			    acceptEventArgs.AcceptSocket = null;
 			    this.poolOfAcceptEventArgs.Push(acceptEventArgs);
 
-			    //inform anyone who needs to know
-			    ConnectUserMessage NewUser = 
+                //this descriptor might be re-used, so remember to set this back
+                ((DescriptorData)receiveEventArgs.UserToken).SocketClosed = false;
+
+                //inform anyone who needs to know
+                ConnectUserMessage NewUser = 
 				    new ConnectUserMessage 
 				    { 
 					    descriptorData = ((DescriptorData)receiveEventArgs.UserToken), 
@@ -881,7 +888,7 @@ namespace SharpROM.Net
 					    //check if we cant send anymore
 					    try
 					    {
-                            //Log.Debug("CLEARED-Err2");
+                            Logger.LogDebug("CLEARED-Err2 - " + ex.Message);
 						    //logEventManger.QueueEvent(new LogMessage { Message = "CLEARED-Err2", Timestamp = DateTime.Now });
 						    //Console.WriteLine("CLEARED-Err2");
 						    currentDescriptor.asyncOpsAreDone.Set();
@@ -889,14 +896,14 @@ namespace SharpROM.Net
 					    }
                         catch(Exception ex2)
 					    {
-                            //Log.ErrorException("Exception", ex2);
+                            Logger.LogError("Exception {0}", ex2.Message);
 						    //logEventManger.QueueEvent(new LogMessage { Message = "Exception - " + ex2.Message, Timestamp = DateTime.Now });
 					    }
 				    }
 			    }
                 else
 			    {
-                    //Log.Debug("CLEARED-Err1");
+                    Logger.LogDebug("CLEARED-Err1");
 				    //logEventManger.QueueEvent(new LogMessage { Message = "CLEARED-Err1", Timestamp = DateTime.Now });
 
 				    //Console.WriteLine("CLEARED-Err2");
@@ -957,7 +964,7 @@ namespace SharpROM.Net
                 //In this example we'll just close the socket if there was a socket error
                 //when receiving data from the client.
 				currentDescriptor.asyncOpsAreDone.Set();
-				//Log.Warn("Socket Error: " + sendEventArgs.SocketError);
+				Logger.LogWarning("Socket Error: " + sendEventArgs.SocketError);
 			    //logEventManger.QueueEvent(new LogMessage { Message = "ERROR: " + sendEventArgs.SocketError, Timestamp = DateTime.Now });
 			    currentDescriptor.Reset();
                 CloseClientSocket(sendEventArgs);
@@ -981,47 +988,77 @@ namespace SharpROM.Net
             {
             }
 
-            //This method closes the socket and releases all resources, both
-            //managed and unmanaged. It internally calls Dispose.
-            //todo: dotnet core 1.1 doesn't have socket.close, 1.2 will.  Fix here
-            e.AcceptSocket.Shutdown(SocketShutdown.Both);
-            e.AcceptSocket.Dispose();
+            try
+            {
+                //This method closes the socket and releases all resources, both
+                //managed and unmanaged. It internally calls Dispose.
+                //todo: dotnet core 1.1 doesn't have socket.close, 1.2 will.  Fix here
+                e.AcceptSocket.Dispose();
 
-            //Make sure the new DataHolder has been created for the next connection.
-            //If it has, then dataMessageReceived should be null.
+                //Make sure the new DataHolder has been created for the next connection.
+                //If it has, then dataMessageReceived should be null.
 
-		    if (receiveSendToken.localBuffer.dataMessageBuffer != null)
-		    {
-			    receiveSendToken.CreateNewDataHolder();
-		    }
+                if (receiveSendToken.localBuffer.dataMessageBuffer != null)
+                {
+                    receiveSendToken.CreateNewDataHolder();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Error Closing Connection: " + ex.Message);
 
-            // Put the SocketAsyncEventArg back into the pool,
-            // to be used by another client. This
-            this.PoolOfRecSendEventArgs.Push(e);
+            }
+            finally
+            {
+                //inform anyone who needs to know
+                DisconnectUserMessage discMesg = new DisconnectUserMessage();
+                discMesg.descriptorData = (e.UserToken as DescriptorData);
+                discMesg.descriptorData.SocketClosed = true;
+                discMesg.SessionID = discMesg.descriptorData.SessionId;
+                EventRoutingService.QueueEvent(discMesg);
 
-            // decrement the counter keeping track of the total number of clients
-            //connected to the server, for testing
-            Interlocked.Decrement(ref this.numberOfAcceptedSockets);
+                //unregister event handlers
+                EventRoutingService.RemoveHandler(((DescriptorData)e.UserToken), typeof(OutMessage));
+                EventRoutingService.RemoveHandler(((DescriptorData)e.UserToken), typeof(OutMessageB));
+                // Put the SocketAsyncEventArg back into the pool,
+                // to be used by another client. This
+                this.PoolOfRecSendEventArgs.Push(e);
 
-            //Release Semaphore so that its connection counter will be decremented.
-            //This must be done AFTER putting the SocketAsyncEventArg back into the pool,
-            //or you can run into problems.
-            this.theMaxConnectionsEnforcer.Release();
+                // decrement the counter keeping track of the total number of clients
+                //connected to the server, for testing
+                Interlocked.Decrement(ref this.numberOfAcceptedSockets);
+
+                //Release Semaphore so that its connection counter will be decremented.
+                //This must be done AFTER putting the SocketAsyncEventArg back into the pool,
+                //or you can run into problems.
+                this.theMaxConnectionsEnforcer.Release();
+            }
+
         }
 
         //____________________________________________________________________________
         private void HandleBadAccept(SocketAsyncEventArgs acceptEventArgs)
         {
+            Logger.LogWarning("Bad Accept: " + acceptEventArgs.SocketError);
             var acceptOpToken = (acceptEventArgs.UserToken as DescriptorData);
 
-            //This method closes the socket and releases all resources, both
-            //managed and unmanaged. It internally calls Dispose.
-            //todo: dotnet core 1.1 doesn't have socket.close, 1.2 will.  Fix here
-            acceptEventArgs.AcceptSocket.Shutdown(SocketShutdown.Both);
-            acceptEventArgs.AcceptSocket.Dispose();
-
-            //Put the SAEA back in the pool.
-            poolOfAcceptEventArgs.Push(acceptEventArgs);
+            try
+            {
+                //This method closes the socket and releases all resources, both
+                //managed and unmanaged. It internally calls Dispose.
+                //todo: dotnet core 1.1 doesn't have socket.close, 1.2 will.  Fix here
+                acceptEventArgs.AcceptSocket.Shutdown(SocketShutdown.Both);
+                acceptEventArgs.AcceptSocket.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Bad Accept: " + ex.Message);
+            }
+            finally
+            {
+                //Put the SAEA back in the pool.
+                poolOfAcceptEventArgs.Push(acceptEventArgs);
+            }
         }
     }
 }

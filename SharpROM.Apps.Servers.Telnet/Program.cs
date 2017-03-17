@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SharpROM.Events;
 using SharpROM.Events.Abstract;
 using SharpROM.Net;
@@ -26,10 +27,14 @@ namespace SharpROM.Apps.Servers.Telnet
             services.AddSingleton<ISocketListener, SocketListener>();
             services.AddSingleton<ISocketReceiveParserFactory, TelnetSocketReceiveParserFactory>();
             services.AddSingleton<IEventRoutingService, EventRoutingService>();
-
+            //ILoggerFactory loggerFactory = new LoggerFactory().AddConsole();
+            services.AddLogging();
 
             var provider = services.BuildServiceProvider();
-            
+
+            //ILoggerFactory loggerFactory 
+            provider.GetService<ILoggerFactory>().AddConsole(LogLevel.Trace);
+
             using (var TelnetService = provider.GetService<TelnetServer>())
             {
                 TelnetService.StartServer();

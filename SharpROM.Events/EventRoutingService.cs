@@ -4,6 +4,7 @@ using System.Threading;
 using SharpROM.Events;
 using SharpROM.Events.Messages;
 using SharpROM.Events.Abstract;
+using Microsoft.Extensions.Logging;
 
 namespace SharpROM.Events
 {
@@ -11,12 +12,14 @@ namespace SharpROM.Events
     {
         //private static Logger Log { get; set; }
 
+        private ILogger Logger { get; set; }
         private List<IEventRoutingRule> RoutingRules { get; set; }
         private Dictionary<int, IEventManager> EventManagers { get; set; }
         private List<Thread> EventThreads { get; set; } = new List<Thread>();
 
-        public EventRoutingService(IEventManager primaryEventManager)
+        public EventRoutingService(IEventManager primaryEventManager, ILogger<EventRoutingService> logger)
         {
+            Logger = logger;
             //Log = LogManager.GetCurrentClassLogger();
             RoutingRules = new List<IEventRoutingRule>();
             EventManagers = new Dictionary<int, IEventManager>();
@@ -37,7 +40,7 @@ namespace SharpROM.Events
 
         public void AddRoutingRule(IEventRoutingRule rule)
         {
-            //Log.Trace("Configuring event routing with rule {0}.", "PLACEHOLDER");
+            Logger.LogTrace("Configuring event routing with rule {0}.", "PLACEHOLDER");
             
             // TODO - create EventManager(s) based on this rule.
 
@@ -71,21 +74,21 @@ namespace SharpROM.Events
 
         public void QueueEvent(IEventMessage message)
         {
-            //var senderId = message.Sender == null ? "NULL" : message.Sender.ID.ToString();
-            //Log.Trace("Queueing event with ID {0} from sender {1}.", message.ID, senderId);
+            var senderId = message.Sender == null ? "NULL" : message.Sender.InstanceId.ToString();
+            Logger.LogTrace("Queueing event with ID {0} from sender {1}.", message.ID, senderId);
             EventManagers[0].QueueEvent(message);
         }
 
         public void RegisterHandler(IServerObject obj, Type t)
         {
-            //Log.Trace("Registering handler for type {0} and game object with GUID {1}.", t.Name, obj.ID);
+            Logger.LogTrace("Registering handler for type {0} and game object with GUID {1}.", t.Name, obj.InstanceId);
             EventManagers[0].RegisterHandler(obj, t);
         }
 
         public void RemoveHandler(IServerObject obj, Type t = null)
         {
             var name = t == null ? String.Empty : t.Name;
-            //Log.Trace("Unregistering handler for type {0} and game object with GUID {1}.", name, obj.ID);
+            Logger.LogTrace("Unregistering handler for type {0} and game object with GUID {1}.", name, obj.InstanceId);
             EventManagers[0].RemoveHandler(obj, t);
         }
 
