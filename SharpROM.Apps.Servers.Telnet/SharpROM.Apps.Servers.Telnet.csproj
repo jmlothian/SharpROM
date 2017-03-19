@@ -3,6 +3,12 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp1.1</TargetFramework>
+    <Authors>Jeremy Lothian</Authors>
+    <Company />
+    <Version>1.0.1</Version>
+    <PackageProjectUrl>https://github.com/jmlothian/SharpROM</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/jmlothian/SharpROM</RepositoryUrl>
+    <RepositoryType>Git</RepositoryType>
   </PropertyGroup>
 
   <ItemGroup>

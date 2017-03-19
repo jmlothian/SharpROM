@@ -13,13 +13,13 @@ namespace SharpROM.Apps.Servers.Telnet
     {
 
         // Injected services.
-        private IEventRoutingService EventRoutingService { get; set; }
-        private ISocketListener SocketListener { get; set; }
+        protected IEventRoutingService EventRoutingService { get; set; }
+        protected ISocketListener SocketListener { get; set; }
 
         // Other members.
         //private List<IEventManager> EventManagers { get; set; }
 
-        private bool _isRunning;
+        protected bool _isRunning;
 
         public TelnetServer(
             IEventRoutingService eventRoutingService,
@@ -45,7 +45,7 @@ namespace SharpROM.Apps.Servers.Telnet
             //Log.Debug("SharpROM Server service construction completed.");
           
         }
-        public void StartServer()
+        public virtual void StartServer()
         {
             //Log.Info("Starting SharpROM Server!");
 
@@ -55,7 +55,7 @@ namespace SharpROM.Apps.Servers.Telnet
             _isRunning = true;
         }
 
-        public void StopServer()
+        public virtual void StopServer()
         {
             //Log.Info("Stopping SharpROM Server!");
 
@@ -65,12 +65,12 @@ namespace SharpROM.Apps.Servers.Telnet
             _isRunning = false;
         }
 
-        public bool IsRunning()
+        public virtual bool IsRunning()
         {
             return _isRunning;
         }
 
-        public void Dispose()
+        public virtual void Dispose()
         {
             EventRoutingService.Dispose();
         }
