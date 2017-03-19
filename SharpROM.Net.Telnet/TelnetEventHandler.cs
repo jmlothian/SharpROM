@@ -126,7 +126,7 @@ namespace SharpROM.Net.Telnet
             //for now, just output it to everyone like a chat server
             GlobalOutMessage OutMesg = new GlobalOutMessage();
             OutMesg.MatchForParentType = true;
-            OutMesg.Message = "[INPUT " + Message.SessionId.ToString() + "]" + Message.Message;
+            OutMesg.Message = "[INPUT " + Message.SessionID.ToString() + "]" + Message.Message;
             eventRoutingService.QueueEvent(OutMesg);
         }
     }

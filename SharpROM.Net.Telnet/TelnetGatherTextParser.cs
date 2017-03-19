@@ -90,7 +90,7 @@ namespace SharpROM.Net.Telnet
                                 TelnetTextInput OutMesg = new TelnetTextInput();
                                 OutMesg.MatchForParentType = true;
                                 OutMesg.Message = System.Text.Encoding.ASCII.GetString(currentCommand);
-                                OutMesg.SessionId = receiveDescriptor.SessionId;
+                                OutMesg.SessionID = receiveDescriptor.SessionId;
 
                                 eventRoutingService.QueueEvent(OutMesg);
 
