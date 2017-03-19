@@ -1,4 +1,5 @@
 ﻿using SharpROM.Events;
+using SharpROM.Net.Abstract;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -7,9 +8,9 @@ using System.Threading.Tasks;
 
 namespace SharpROM.Net.Messages
 {
-	public class ConnectUserMessage : EventMessage
-	{
+	public class ConnectUserMessage : EventMessage, INetworkMessage
+    {
 		public Int32 SessionID { get; set; }
-		public DescriptorData descriptorData { get; set; }
+		public IDescriptorData descriptorData { get; set; }
 	}
 }

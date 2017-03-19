@@ -2,12 +2,21 @@
 
   <PropertyGroup>
     <TargetFramework>netcoreapp1.1</TargetFramework>
+    <Authors>Jeremy Lothian</Authors>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Company />
+    <PackageProjectUrl>https://github.com/jmlothian/SharpROM</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/jmlothian/SharpROM</RepositoryUrl>
+    <RepositoryType>Git</RepositoryType>
+    <AssemblyVersion>1.0.1.0</AssemblyVersion>
+    <FileVersion>1.0.1.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\SharpROM.Events\SharpROM.Events.csproj" />
     <ProjectReference Include="..\SharpROM.Net.Abstract\SharpROM.Net.Abstract.csproj" />
     <ProjectReference Include="..\SharpROM.Net.Util\SharpROM.Net.Util.csproj" />
+    <ProjectReference Include="..\SharpROM.Net\SharpROM.Net.csproj" />
   </ItemGroup>
 
 </Project>

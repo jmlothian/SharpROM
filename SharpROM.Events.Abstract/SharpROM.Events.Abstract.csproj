@@ -1,7 +1,14 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>netcoreapp1.1</TargetFramework>
+    <Company />
+    <Authors>Jeremy Lothian</Authors>
+    <Version>1.0.1</Version>
+    <PackageProjectUrl>https://github.com/jmlothian/SharpROM</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/jmlothian/SharpROM</RepositoryUrl>
+    <RepositoryType>Git</RepositoryType>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
   </PropertyGroup>
 
 </Project>
