@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <TargetFramework>netcoreapp1.1</TargetFramework>
-    <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
-    <Version>1.0.1</Version>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Version>1.0.2</Version>
     <Company />
     <Authors>Jeremy Lothian</Authors>
     <RepositoryUrl>https://github.com/jmlothian/SharpROM</RepositoryUrl>

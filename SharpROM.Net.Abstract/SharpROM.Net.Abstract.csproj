@@ -2,14 +2,14 @@
 
   <PropertyGroup>
     <TargetFramework>netcoreapp1.1</TargetFramework>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <Authors>Jeremy Lothian</Authors>
     <Company />
     <PackageProjectUrl>https://github.com/jmlothian/SharpROM</PackageProjectUrl>
     <RepositoryUrl>https://github.com/jmlothian/SharpROM</RepositoryUrl>
     <RepositoryType>Git</RepositoryType>
     <PackageRequireLicenseAcceptance>False</PackageRequireLicenseAcceptance>
-    <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
   </PropertyGroup>
 
   <ItemGroup>
