@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>netcoreapp1.1</TargetFramework>
     <Authors>Jeremy Lothian</Authors>
-    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
     <Company />
     <PackageProjectUrl>https://github.com/jmlothian/SharpROM</PackageProjectUrl>
     <RepositoryUrl>https://github.com/jmlothian/SharpROM</RepositoryUrl>

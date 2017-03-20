@@ -5,7 +5,7 @@
     <Version>1.0.1</Version>
     <Authors>Jeremy Lothian</Authors>
     <Company />
-    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
   </PropertyGroup>
 
   <ItemGroup>
