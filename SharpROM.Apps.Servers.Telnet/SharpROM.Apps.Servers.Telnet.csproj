@@ -5,11 +5,11 @@
     <TargetFramework>netcoreapp1.1</TargetFramework>
     <Authors>Jeremy Lothian</Authors>
     <Company />
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <PackageProjectUrl>https://github.com/jmlothian/SharpROM</PackageProjectUrl>
     <RepositoryUrl>https://github.com/jmlothian/SharpROM</RepositoryUrl>
     <RepositoryType>Git</RepositoryType>
-    <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
   </PropertyGroup>
 
   <ItemGroup>
