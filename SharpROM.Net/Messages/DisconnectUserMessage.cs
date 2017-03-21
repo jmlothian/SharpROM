@@ -9,6 +9,6 @@ namespace SharpROM.Net.Messages
     public class DisconnectUserMessage : EventMessage, INetworkMessage
     {
         public Int32 SessionID { get; set; }
-        public IDescriptorData descriptorData { get; set; }
+        public IDescriptorData Descriptor { get; set; }
     }
 }

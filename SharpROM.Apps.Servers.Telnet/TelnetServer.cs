@@ -23,8 +23,7 @@ namespace SharpROM.Apps.Servers.Telnet
 
         public TelnetServer(
             IEventRoutingService eventRoutingService,
-            ISocketListener socketListener,
-            TelnetEventHandler eventHandler
+            ISocketListener socketListener            
             )
         {
             //Log = LogManager.GetCurrentClassLogger();

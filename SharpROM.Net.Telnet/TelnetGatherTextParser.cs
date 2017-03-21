@@ -91,6 +91,7 @@ namespace SharpROM.Net.Telnet
                                 OutMesg.MatchForParentType = true;
                                 OutMesg.Message = System.Text.Encoding.ASCII.GetString(currentCommand);
                                 OutMesg.SessionID = receiveDescriptor.SessionId;
+                                OutMesg.Descriptor = receiveDescriptor;
 
                                 eventRoutingService.QueueEvent(OutMesg);
 

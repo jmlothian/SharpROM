@@ -8,6 +8,6 @@ namespace SharpROM.Net.Messages
     public interface INetworkMessage
     {
         Int32 SessionID { get; set; }
-        IDescriptorData descriptorData { get; set; }
+        IDescriptorData Descriptor { get; set; }
     }
 }

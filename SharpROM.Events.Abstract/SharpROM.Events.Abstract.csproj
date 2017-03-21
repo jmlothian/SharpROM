@@ -4,7 +4,7 @@
     <TargetFramework>netcoreapp1.1</TargetFramework>
     <Company />
     <Authors>Jeremy Lothian</Authors>
-    <Version>1.0.2</Version>
+    <Version>1.0.3</Version>
     <PackageProjectUrl>https://github.com/jmlothian/SharpROM</PackageProjectUrl>
     <RepositoryUrl>https://github.com/jmlothian/SharpROM</RepositoryUrl>
     <RepositoryType>Git</RepositoryType>

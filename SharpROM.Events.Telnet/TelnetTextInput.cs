@@ -11,6 +11,6 @@ namespace SharpROM.Events.Messages.Telnet
     {
         public string Message { get; set; } = "";
         public int SessionID { get; set; } = 0;
-        public IDescriptorData descriptorData { get; set; }
+        public IDescriptorData Descriptor { get; set; }
     }
 }

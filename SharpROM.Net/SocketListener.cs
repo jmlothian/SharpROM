@@ -493,7 +493,7 @@ namespace SharpROM.Net
                 ConnectUserMessage NewUser = 
 				    new ConnectUserMessage 
 				    { 
-					    descriptorData = ((DescriptorData)receiveEventArgs.UserToken), 
+					    Descriptor = ((DescriptorData)receiveEventArgs.UserToken), 
 					    SessionID = ((DescriptorData)receiveEventArgs.UserToken).SessionId 
 				    };
                 EventRoutingService.QueueEvent(NewUser);
@@ -1020,8 +1020,8 @@ namespace SharpROM.Net
                     {
                         //inform anyone who needs to know
                         DisconnectUserMessage discMesg = new DisconnectUserMessage();
-                        discMesg.descriptorData = receiveSendToken;
-                        discMesg.SessionID = discMesg.descriptorData.SessionId;
+                        discMesg.Descriptor = receiveSendToken;
+                        discMesg.SessionID = discMesg.Descriptor.SessionId;
                         EventRoutingService.QueueEvent(discMesg);
 
                         //unregister event handlers

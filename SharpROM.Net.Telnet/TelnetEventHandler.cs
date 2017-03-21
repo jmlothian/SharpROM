@@ -33,11 +33,13 @@ namespace SharpROM.Net.Telnet
             bool ContinueProcessing = true;
             if (Message is DisconnectUserMessage)
             {
+                /*
                 int SessionID = ((DisconnectUserMessage)Message).SessionID;
                 GlobalOutMessage mesg = new GlobalOutMessage();
                 mesg.MatchForParentType = true;
                 mesg.Message = SessionID.ToString() + " has disconnected.";
                 eventRoutingService.QueueEvent(mesg);
+                */
             }
             else
             if (Message is ConnectUserMessage)
@@ -51,7 +53,7 @@ namespace SharpROM.Net.Telnet
                 {
                     OutMessageB mesg = new OutMessageB();
                     mesg.Message = new byte[] { (byte)TELOPTCODE.IAC, (byte)TELOPTCODE.WILL, handler.Key };
-                    mesg.Target = ((ConnectUserMessage)Message).descriptorData;
+                    mesg.Target = ((ConnectUserMessage)Message).Descriptor;
                     eventRoutingService.QueueEvent(mesg);
                     TelOpts.TelOptsRequested[((ConnectUserMessage)Message).SessionID].Add(handler.Key);
                 }
@@ -62,14 +64,16 @@ namespace SharpROM.Net.Telnet
                     {
                         OutMessageB mesg = new OutMessageB();
                         mesg.Message = new byte[] { (byte)TELOPTCODE.IAC, (byte)TELOPTCODE.DO, handler.Key };
-                        mesg.Target = ((ConnectUserMessage)Message).descriptorData;
+                        mesg.Target = ((ConnectUserMessage)Message).Descriptor;
                         eventRoutingService.QueueEvent(mesg);
                     }
                 }
+                /*
                 GlobalOutMessage connmesg = new GlobalOutMessage();
                 connmesg.MatchForParentType = true;
                 connmesg.Message = SessionID.ToString() + " has connected.";
                 eventRoutingService.QueueEvent(connmesg);
+                */
             }
             else if (Message is TelOptMessage)
             {
