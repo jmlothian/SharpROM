@@ -4,7 +4,7 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <Company />
     <Authors>Jeremy Lothian</Authors>
-    <Version>1.0.3</Version>
+    <Version>1.0.4</Version>
     <PackageProjectUrl>https://github.com/jmlothian/SharpROM</PackageProjectUrl>
     <RepositoryUrl>https://github.com/jmlothian/SharpROM</RepositoryUrl>
     <RepositoryType>Git</RepositoryType>
